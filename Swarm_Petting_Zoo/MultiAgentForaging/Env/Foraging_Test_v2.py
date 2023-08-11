@@ -24,8 +24,8 @@ def go_home_FOV(env, observation, agent):
     else:
         return 1 if dy > 0 else 3
 
-num_agents = 2
-env = ForagingEnvironment(num_agents, render_mode="human")
+num_agents = 50
+env = ForagingEnvironment(num_agents, size = 50, render_mode="human", show_fov = False)
 env.reset(seed=42)
 
 for agent in env.agent_iter():
@@ -42,13 +42,13 @@ for agent in env.agent_iter():
         else:
             action = go_home_FOV(env, observation, agent)
             #print(f"{agent} moved to position: {env.get_agent_location(agent)}")
-            print(observation)
+            #print(observation)
 
 
         env.step(action)
         
-    if not env.active_agents:
-        print("All agents are inactive, ending simulation.")
+    if all(env.terminations.values()):
+        print("All agents are terminated, ending simulation.")
         break
 
 env.close()

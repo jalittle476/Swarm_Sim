@@ -6,20 +6,25 @@ import numpy as np
 import pygame
 
 class ForagingEnvironment(AECEnv):
-    metadata = {"name": "foraging_environment_v0", "render_fps": 30}
+    metadata = {"name": "foraging_environment_v0", "render_fps": 100}
 
-    def __init__(self, num_agents, render_mode=None, size=20, seed=255, num_resources=5, fov=2, show_fov = False):
+    def __init__(self, num_agents, render_mode=None, size=20, seed=255, num_resources=5, fov=2, show_fov = False, show_gridlines = False, draw_numbers = True):
         self.np_random = np.random.default_rng(seed)
         self.size = size  # The size of the square grid
-        self.window_size = 512  # The size of the PyGame window
-        self.window = pygame.display.set_mode((self.window_size, self.window_size))
         self.num_resources = num_resources
         self.fov = fov
         self.show_fov = show_fov
         self.render_mode = render_mode
-        self.clock = None
+        self.agent_to_visualize = "agent_0"
+        self.show_gridlines = show_gridlines
+        self.draw_numbers = draw_numbers
+        self.paused = False
         
-
+        pygame.init()
+        self.window = None
+        self.clock = None
+        self.window_size = 1024  # The size of the PyGame window
+        
         # Initialize the possible agents
         self.possible_agents = [f"agent_{i}" for i in range(num_agents)]
         self.agent_selection = self.possible_agents[0]
@@ -48,11 +53,6 @@ class ForagingEnvironment(AECEnv):
             3: np.array([0, -1]),
         }
 
-        self.paused = False
-        
-        # assert render_mode is None or render_mode in self.metadata["render_modes"]
-        # self.render_mode = render_mode
-
         """
         If human-rendering is used, `self.window` will be a reference
         to the window that we draw to. `self.clock` will be a clock that is used
@@ -66,7 +66,7 @@ class ForagingEnvironment(AECEnv):
     def reset(self, seed=None, options=None):
         # If you're extending another class, call its reset method (if needed)
         #super().reset(seed=seed)
-        self.active_agents = set(self.possible_agents)
+        # self.active_agents = set(self.possible_agents)
         
         # Home base is at the center of the grid
         self._home_base_location = np.array([self.size // 2, self.size // 2])
@@ -98,27 +98,27 @@ class ForagingEnvironment(AECEnv):
 
     def step(self, action):
         agent = self.agent_selection  # Get the current agent
-        
+
         # Initialize reward, termination, and truncation
         reward = 0
         terminated = False
         truncation = False
-        
-        # Check if the agent's battery level is zero
-        if self._battery_level[agent] == 0 or action is None:
-            # Remove the agent from the active agents set
-            self.active_agents.discard(agent)
-            # Skip the agent's turn if battery is zero
-            self._update_agent_selection()
-            
-            # Check if all agents have a battery level of zero (i.e., no active agents)
-            if not self.active_agents:
+
+        # Check if the agent's battery level is zero or if the agent is already terminated
+        if self._battery_level[agent] == 0 or self.terminations[agent] or action is None:
+            self.terminations[agent] = True  # Mark the agent as terminated
+
+            # Check if all agents are terminated
+            if all(self.terminations.values()):
                 terminated = True
                 reward = -100  # Adjust this based on your reward scheme
-            # Update termination status for all agents
-                self.terminations = {agent: True for agent in self.possible_agents}
+
                 observation, _, _, truncation, info = self.last()
                 return observation, reward, terminated, truncation, info
+
+            # Skip the rest of the step for this agent
+            self._update_agent_selection()
+            return
 
         direction = self._action_to_direction[action]
 
@@ -153,31 +153,41 @@ class ForagingEnvironment(AECEnv):
         # Update selected agent for the next step
         self._update_agent_selection()
         
-        if not self.active_agents:
+        if all(self.terminations.values()):
             terminated = True
-
+            
         if self.render_mode == "human":
             self._render_frame()
 
         return observation, reward, terminated, truncation, info
 
     def _update_agent_selection(self):
-        
-        if not self.active_agents:
-            return
-        
-        current_idx = self.possible_agents.index(self.agent_selection)
-        next_idx = (current_idx + 1) % len(self.active_agents)
-        self.agent_selection = self.possible_agents[next_idx]
+        current_idx = self.agents.index(self.agent_selection)
+        next_idx = (current_idx + 1) % len(self.agents)
+
+        # Loop through the agents starting from the next index, looking for the next non-terminated agent
+        for i in range(len(self.agents)):
+            candidate_idx = (next_idx + i) % len(self.agents)
+            candidate_agent = self.agents[candidate_idx]
+
+            if not self.terminations[candidate_agent]:
+                self.agent_selection = candidate_agent
+                return
+
+        # If all agents are terminated, you can handle it as you see fit (e.g., set agent_selection to None)
+        self.agent_selection = None
+
 
     def render(self):
         if self.render_mode == "rgb_array":
             return self._render_frame()
 
     def _render_frame(self):
+        
         if self.window is None and self.render_mode == "human":
-            pygame.init()
-            pygame.display.init()
+            # pygame.init()
+            # pygame.display.init()
+            
             self.window = pygame.display.set_mode(
                 (self.window_size, self.window_size))
         if self.clock is None and self.render_mode == "human":
@@ -210,64 +220,81 @@ class ForagingEnvironment(AECEnv):
                 ),
             )
 
-        # Now we draw all the agents
-        for agent, location in self._agent_locations.items():
-            pygame.draw.circle(
+        if self.draw_numbers: 
+            # Now we draw all the agents with numbers
+            for idx, (agent, location) in enumerate(self._agent_locations.items()):
+                pygame.draw.circle(
                 canvas,
                 (0, 0, 255),
                 (location + 0.5) * pix_square_size,
                 pix_square_size / 3,
-            )
+                )
+
+                # Draw the agent's index number
+                font = pygame.font.SysFont(None, 20)  # Choose an appropriate font size
+                text_surface = font.render(str(idx), True, (0, 0, 0))  # White text
+                # Position the text above the agent
+                text_position = ((location[0] + 0.3) * pix_square_size, (location[1] - 0.2) * pix_square_size)  # Adjust this position as needed
+                canvas.blit(text_surface, text_position)
         
-        # Finally, add some gridlines
-        for x in range(self.size + 1):
-            pygame.draw.line(
-                canvas,
-                0,
-                (0, pix_square_size * x),
-                (self.window_size, pix_square_size * x),
-                width=3,
-            )
-            pygame.draw.line(
-                canvas,
-                0,
-                (pix_square_size * x, 0),
-                (pix_square_size * x, self.window_size),
-                width=3,
-            )
+        else:
+            
+            # Now we draw all the agents
+            for agent, location in self._agent_locations.items():
+                pygame.draw.circle(
+                    canvas,
+                    (0, 0, 255),
+                    (location + 0.5) * pix_square_size,
+                    pix_square_size / 3,
+                )
+            
+        
+        
+        if self.show_gridlines:
+            # Finally, add some gridlines
+            for x in range(self.size + 1):
+                pygame.draw.line(
+                    canvas,
+                    0,
+                    (0, pix_square_size * x),
+                    (self.window_size, pix_square_size * x),
+                    width=3,
+                )
+                pygame.draw.line(
+                    canvas,
+                    0,
+                    (pix_square_size * x, 0),
+                    (pix_square_size * x, self.window_size),
+                    width=3,
+                )
 
        # Visualize the FOV
         fov = self.fov  # Adjust this if you've defined FOV elsewhere
 
-        # Get the location of the currently selected agent
-        current_agent_location = self._agent_locations[self.agent_selection]
+        if self.show_fov:
+            
+            # Get the location of the currently selected agent
+            current_agent_location = self._agent_locations[self.agent_to_visualize]
 
-        # Get the coordinates of the top-left and bottom-right corners of the FOV
-        # Calculate the boundaries for the FOV
-        tl_x = max(0, current_agent_location[0] - fov)
-        tl_y = max(0, current_agent_location[1] - fov)
-        br_x = min(self.size, current_agent_location[0] + fov + 1)
-        br_y = min(self.size, current_agent_location[1] + fov + 1)
+            # Get the coordinates of the top-left and bottom-right corners of the FOV
+            # Calculate the boundaries for the FOV
+            tl_x = max(0, current_agent_location[0] - fov)
+            tl_y = max(0, current_agent_location[1] - fov)
+            br_x = min(self.size, current_agent_location[0] + fov + 1)
+            br_y = min(self.size, current_agent_location[1] + fov + 1)
 
 
-        # Create a semi-transparent surface for the FOV
-        fov_surface = pygame.Surface((self.window_size, self.window_size), pygame.SRCALPHA)
-        fov_color = (100, 100, 255, 80)  # RGBA: semi-transparent blue
+            # Create a semi-transparent surface for the FOV
+            fov_surface = pygame.Surface((self.window_size, self.window_size), pygame.SRCALPHA)
+            fov_color = (100, 100, 255, 80)  # RGBA: semi-transparent blue
 
-        # Fill the cells within the FOV
-        for x in range(tl_x, br_x):
-            for y in range(tl_y, br_y):
-                pygame.draw.rect(fov_surface, fov_color, pygame.Rect(pix_square_size * np.array([x, y]), (pix_square_size, pix_square_size)))
+            # Fill the cells within the FOV
+            for x in range(tl_x, br_x):
+                for y in range(tl_y, br_y):
+                    pygame.draw.rect(fov_surface, fov_color, pygame.Rect(pix_square_size * np.array([x, y]), (pix_square_size, pix_square_size)))
 
-        # Blit the FOV surface onto the main canvas
-        canvas.blit(fov_surface, (0, 0))
-
-        # # Visualize the FOV (for the currently selected agent if needed)
-        # if self.show_fov:
-        #     agent_location = self._agent_locations[self.agent_selection]
-        #     # Code to render FOV based on agent_location ...
-
-        # ... (rest of the code, including pausing and display update, stays the same) ...
+            # Blit the FOV surface onto the main canvas
+            canvas.blit(fov_surface, (0, 0))
 
           # Pausing code
         if self.paused:
@@ -275,6 +302,22 @@ class ForagingEnvironment(AECEnv):
             pause_surf = font.render('Paused', True, (255, 0, 0))
             pause_rect = pause_surf.get_rect(center=(self.window_size/2, self.window_size/2))
             self.window.blit(pause_surf, pause_rect)
+        
+        
+        # Determine the number of active agents using the agents attribute
+        num_active_agents = len(self.agents)
+
+        # Define the font and size
+        font = pygame.font.SysFont(None, 24)
+
+        # Create a surface containing the text
+        text_surface = font.render(f'Active Agents: {num_active_agents}', True, (0, 0, 0))
+
+        # Define the position where the text will be drawn (you can adjust this as needed)
+        text_position = (10, 10)
+
+        # Draw the text on the canvas
+        canvas.blit(text_surface, text_position)
         
         if self.render_mode == "human":
             # The following line copies our drawings from `canvas` to the visible window
@@ -318,8 +361,7 @@ class ForagingEnvironment(AECEnv):
     def _get_info(self, agent):
         return {
             "carrying": self._carrying[agent],
-            "remaining_resources": len(self._resources_location)
-    }
+            "remaining_resources": len(self._resources_location)}
 
     def observe(self, agent):
         """
