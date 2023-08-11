@@ -8,7 +8,7 @@ import pygame
 class ForagingEnvironment(AECEnv):
     metadata = {"name": "foraging_environment_v0", "render_fps": 30}
 
-    def __init__(self, num_agents = 2, render_mode=None, size=20, seed=255, num_resources=5, fov=2, show_fov = False):
+    def __init__(self, num_agents, render_mode=None, size=20, seed=255, num_resources=5, fov=2, show_fov = False):
         self.np_random = np.random.default_rng(seed)
         self.size = size  # The size of the square grid
         self.window_size = 512  # The size of the PyGame window
@@ -66,7 +66,8 @@ class ForagingEnvironment(AECEnv):
     def reset(self, seed=None, options=None):
         # If you're extending another class, call its reset method (if needed)
         #super().reset(seed=seed)
-
+        self.active_agents = set(self.possible_agents)
+        
         # Home base is at the center of the grid
         self._home_base_location = np.array([self.size // 2, self.size // 2])
         
@@ -97,17 +98,37 @@ class ForagingEnvironment(AECEnv):
 
     def step(self, action):
         agent = self.agent_selection  # Get the current agent
+        
+        # Initialize reward, termination, and truncation
+        reward = 0
+        terminated = False
+        truncation = False
+        
+        # Check if the agent's battery level is zero
+        if self._battery_level[agent] == 0 or action is None:
+            # Remove the agent from the active agents set
+            self.active_agents.discard(agent)
+            # Skip the agent's turn if battery is zero
+            self._update_agent_selection()
+            
+            # Check if all agents have a battery level of zero (i.e., no active agents)
+            if not self.active_agents:
+                terminated = True
+                reward = -100  # Adjust this based on your reward scheme
+            # Update termination status for all agents
+                self.terminations = {agent: True for agent in self.possible_agents}
+                observation, _, _, truncation, info = self.last()
+                return observation, reward, terminated, truncation, info
+
         direction = self._action_to_direction[action]
 
         # Move the agent within the grid
         self._agent_locations[agent] = np.clip(
             self._agent_locations[agent] + direction, 0, self.size - 1
         )
-
-        # Initialize reward, termination, and truncation
-        reward = 0
-        terminated = False
-        truncation = False
+        
+        # Reduce battery level
+        self._battery_level[agent] -= 1
 
         # Check if the agent is on a resource location
         for i in range(len(self._resources_location)):
@@ -126,19 +147,14 @@ class ForagingEnvironment(AECEnv):
         if len(self._resources_location) == 0 and not any(self._carrying.values()):
             terminated = True
 
-        # Check if all agents have a battery level of zero
-        if all(battery_level == 0 for battery_level in self._battery_level.values()):
-            terminated = True
-            reward = -100  # You may want to adjust this based on your reward scheme
-
-        # Reduce battery level
-        self._battery_level[agent] -= 1
-
         observation = self._get_obs(agent)
         info = self._get_info(agent)
 
         # Update selected agent for the next step
         self._update_agent_selection()
+        
+        if not self.active_agents:
+            terminated = True
 
         if self.render_mode == "human":
             self._render_frame()
@@ -146,8 +162,12 @@ class ForagingEnvironment(AECEnv):
         return observation, reward, terminated, truncation, info
 
     def _update_agent_selection(self):
+        
+        if not self.active_agents:
+            return
+        
         current_idx = self.possible_agents.index(self.agent_selection)
-        next_idx = (current_idx + 1) % self.num_agents
+        next_idx = (current_idx + 1) % len(self.active_agents)
         self.agent_selection = self.possible_agents[next_idx]
 
     def render(self):
