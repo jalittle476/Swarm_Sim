@@ -180,20 +180,32 @@ class ForagingEnvironment(AECEnv):
         # Check if the agent's battery level is below the threshold
         return self._battery_level[agent] <= max_distance_to_base
     
+    # def _is_location_valid(self, location):
+    #     CRITICAL_BATTERY_LEVEL = self.initial_battery_level * 0.05  # Define a threshold for low battery
+    #     for other_agent, agent_location in self._agent_locations.items():
+    #         if np.array_equal(location, agent_location):
+    #             # Check if other agent is dead
+    #             if self._battery_level[other_agent] == 0: 
+    #                 return True # dead agents don't count
+    #             # Check if the agent is alive with sufficient battery
+    #             if self._battery_level[other_agent] > CRITICAL_BATTERY_LEVEL:
+    #                 return False  # Location is occupied by an active agent
+    #             # Check if the agent with low battery is not at the base
+    #             if self._battery_level[other_agent] <= CRITICAL_BATTERY_LEVEL and not np.array_equal(agent_location, self._home_base_location):
+    #                 return False  # Agent with low battery but not at base is blocking
+    #     return True  # Location is either not occupied or occupied by non-blocking agent
+    
     def _is_location_valid(self, location):
-        CRITICAL_BATTERY_LEVEL = self.initial_battery_level * 0.05  # Define a threshold for low battery
+        # Check if the location is the home base
+        if np.array_equal(location, self._home_base_location):
+            return True  # The home base can hold any number of agents
+
+        # For other locations, check if they are occupied by an agent
         for other_agent, agent_location in self._agent_locations.items():
             if np.array_equal(location, agent_location):
-                # Check if other agent is dead
-                if self._battery_level[other_agent] == 0: 
-                    return True # dead agents don't count
-                # Check if the agent is alive with sufficient battery
-                if self._battery_level[other_agent] > CRITICAL_BATTERY_LEVEL:
-                    return False  # Location is occupied by an active agent
-                # Check if the agent with low battery is not at the base
-                if self._battery_level[other_agent] <= CRITICAL_BATTERY_LEVEL and not np.array_equal(agent_location, self._home_base_location):
-                    return False  # Agent with low battery but not at base is blocking
-        return True  # Location is either not occupied or occupied by non-blocking agent
+                return False  # Location is occupied by an agent
+
+        return True  # Location is not occupied and is not the home base
 
     
     def _simple_avoidance(self, agent, direction):
@@ -244,7 +256,7 @@ class ForagingEnvironment(AECEnv):
         # Draw the home base
         pygame.draw.rect(
             canvas,
-            (0, 255, 0),
+            (102, 51, 0),
             pygame.Rect(
                 pix_square_size * self._home_base_location,
                 (pix_square_size, pix_square_size),
@@ -255,7 +267,7 @@ class ForagingEnvironment(AECEnv):
         for resource_location in self._resources_location:
             pygame.draw.rect(
                 canvas,
-                (255, 0, 0),
+                (0, 102, 0),
                 pygame.Rect(
                     pix_square_size * resource_location,
                     (pix_square_size, pix_square_size),
@@ -275,7 +287,7 @@ class ForagingEnvironment(AECEnv):
                 if is_battery_depleted:
                     agent_color = (0, 0, 0)  # Black color for zero battery
                 elif is_carrying_resource:
-                    agent_color = (0, 255, 0)  # Green color if carrying a resource
+                    agent_color = (0, 102, 0)  # Green color if carrying a resource
                 else:
                     agent_color = (0, 0, 255)  # Blue color otherwise
 
@@ -301,7 +313,7 @@ class ForagingEnvironment(AECEnv):
                 is_carrying_resource = self._carrying[agent]
                 
                 # Check if the agent's battery is low
-                is_battery_low = self._battery_level[agent] < 10
+                is_battery_low = self._battery_level[agent] < self.size
                 
                 # Check if the agent's battery level is zero
                 is_battery_depleted = self._battery_level[agent] == 0

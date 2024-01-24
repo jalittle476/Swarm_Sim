@@ -17,8 +17,8 @@ def gaussian_sample(mean_direction, std_dev=1.0):
     else:
         return 1 if sampled_dy > 0 else 3  # Down or up
 
-def should_return_to_base(battery_level, max_distance):
-    return battery_level <= max_distance
+def should_return_to_base(battery_level, min_battery_level):
+    return battery_level <= min_battery_level
 
 def return_to_base_with_low_battery(agent_location, base_location):
     # Check if the agent is already at the base
@@ -61,7 +61,7 @@ env = ForagingEnvironment(num_agents=20, size = 25, render_mode="human", show_fo
 env.reset(seed=42)
 battery_safety_margin = 0 # Robot's will not assume perfect knowlege of their battery levels 
 # Define the maximum distance to the base as a threshold
-max_distance_to_base = (env.size // 2) * 2 - battery_safety_margin
+min_battery_level = env.size
 base_location = [env.size // 2, env.size // 2]  # Assuming the base is at the center
 exit_simulation = False  # Flag to indicate whether to exit the simulation
 
@@ -83,7 +83,7 @@ for agent in env.agent_iter():
     if not env.paused:
         if termination or truncation:
             action = None
-        elif should_return_to_base(observation["battery_level"], max_distance_to_base):
+        elif should_return_to_base(observation["battery_level"], min_battery_level):
             action = return_to_base_with_low_battery(observation["agent_location"], base_location)
         else:
             action = foraging_behavior(env, observation, agent)
