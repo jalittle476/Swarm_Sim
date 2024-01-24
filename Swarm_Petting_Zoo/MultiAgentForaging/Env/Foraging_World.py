@@ -8,7 +8,7 @@ import pygame
 class ForagingEnvironment(AECEnv):
     metadata = {"name": "foraging_environment_v0", "render_fps": 1000}
 
-    def __init__(self, num_agents, render_mode=None, size=20, seed=255, num_resources=5, fov=2, show_fov = False, show_gridlines = False, draw_numbers = True, record_sim = False):
+    def __init__(self, num_agents, render_mode=None, size=20, seed=255, num_resources=5, fov=2, show_fov = False, show_gridlines = False, draw_numbers = False, record_sim = False):
         self.np_random = np.random.default_rng(seed)
         self.size = size  # The size of the square grid
         self.num_resources = num_resources
@@ -21,6 +21,7 @@ class ForagingEnvironment(AECEnv):
         self.paused = False
         self.record_sim = record_sim
         self.frame_count = 0
+        self.initial_battery_level = 4 * size # They could explore the perimeter of the space 
         
         pygame.init()
         self.window = None
@@ -34,8 +35,8 @@ class ForagingEnvironment(AECEnv):
         self.agents = self.possible_agents.copy()
 
         # Initialize carrying status and battery level for each agent
-        self._carrying = {agent: False for agent in self.possible_agents}
-        self._battery_level = {agent: 100 for agent in self.possible_agents}
+        # self._carrying = {agent: False for agent in self.possible_agents}
+        # self._battery_level = {agent: initial_battery_level for agent in self.possible_agents}
 
         # Initialize observation space and action space (as provided earlier)
         self.observation_space = spaces.Dict(
@@ -81,7 +82,8 @@ class ForagingEnvironment(AECEnv):
 
         # Reset carrying status and battery level for each agent
         self._carrying = {agent: False for agent in self.possible_agents}
-        self._battery_level = {agent: 100 for agent in self.possible_agents}
+        
+        self._battery_level = {agent: self.initial_battery_level for agent in self.possible_agents}
 
         # Set the initial agent selection
         self.agent_selection = self.possible_agents[0]
@@ -179,7 +181,7 @@ class ForagingEnvironment(AECEnv):
         return self._battery_level[agent] <= max_distance_to_base
     
     def _is_location_valid(self, location):
-        CRITICAL_BATTERY_LEVEL = 15  # Define a threshold for low battery
+        CRITICAL_BATTERY_LEVEL = self.initial_battery_level * 0.05  # Define a threshold for low battery
         for other_agent, agent_location in self._agent_locations.items():
             if np.array_equal(location, agent_location):
                 # Check if other agent is dead

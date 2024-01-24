@@ -20,11 +20,6 @@ def gaussian_sample(mean_direction, std_dev=1.0):
 def should_return_to_base(battery_level, max_distance):
     return battery_level <= max_distance
 
-# def return_to_base_with_low_battery(agent_location, base_location):
-#     # Logic to calculate the action that moves the agent towards the base
-#     direction = np.array(base_location) - np.array(agent_location)
-#     return gaussian_sample(direction, std_dev= 0.1)  # You might adjust the std_dev as needed
-
 def return_to_base_with_low_battery(agent_location, base_location):
     # Check if the agent is already at the base
     if np.array_equal(agent_location, base_location):
@@ -62,7 +57,7 @@ def foraging_behavior(env, observation, agent, std_dev=0.5):
         new_action = gaussian_sample(mean_direction, std_dev)
         return new_action
 
-env = ForagingEnvironment(num_agents=10, size = 25, render_mode="human", show_fov = False, draw_numbers=False, num_resources=200)
+env = ForagingEnvironment(num_agents=20, size = 25, render_mode="human", show_fov = False, draw_numbers=False, num_resources=200)
 env.reset(seed=42)
 battery_safety_margin = 0 # Robot's will not assume perfect knowlege of their battery levels 
 # Define the maximum distance to the base as a threshold
@@ -97,8 +92,26 @@ for agent in env.agent_iter():
 
         env.step(action)
         
+    # Check if all agents are terminated, then pause
     if all(env.terminations.values()):
-        print("All agents are terminated, ending simulation.")
-        break
+        print("All agents are terminated. Press any key to exit.")
+
+        # Refresh/render the screen one last time before pausing
+        if env.render_mode == "human":
+            env._render()
+
+        # Wait for a key press to exit
+        waiting_for_input = True
+        while waiting_for_input:
+            for event in pygame.event.get():
+                if event.type == pygame.KEYDOWN:
+                    waiting_for_input = False
+                elif event.type == pygame.QUIT:
+                    waiting_for_input = False
+                    exit_simulation = True
+
+        if exit_simulation:
+            break
 
 env.close()
+
