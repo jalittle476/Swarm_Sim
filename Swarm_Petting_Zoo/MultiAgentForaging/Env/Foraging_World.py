@@ -179,9 +179,12 @@ class ForagingEnvironment(AECEnv):
         return self._battery_level[agent] <= max_distance_to_base
     
     def _is_location_valid(self, location):
-        CRITICAL_BATTERY_LEVEL = 10  # Define a threshold for low battery
+        CRITICAL_BATTERY_LEVEL = 15  # Define a threshold for low battery
         for other_agent, agent_location in self._agent_locations.items():
             if np.array_equal(location, agent_location):
+                # Check if other agent is dead
+                if self._battery_level[other_agent] == 0: 
+                    return True # dead agents don't count
                 # Check if the agent is alive with sufficient battery
                 if self._battery_level[other_agent] > CRITICAL_BATTERY_LEVEL:
                     return False  # Location is occupied by an active agent

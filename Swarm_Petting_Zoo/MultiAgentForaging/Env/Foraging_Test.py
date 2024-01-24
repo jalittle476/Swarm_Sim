@@ -20,10 +20,19 @@ def gaussian_sample(mean_direction, std_dev=1.0):
 def should_return_to_base(battery_level, max_distance):
     return battery_level <= max_distance
 
+# def return_to_base_with_low_battery(agent_location, base_location):
+#     # Logic to calculate the action that moves the agent towards the base
+#     direction = np.array(base_location) - np.array(agent_location)
+#     return gaussian_sample(direction, std_dev= 0.1)  # You might adjust the std_dev as needed
+
 def return_to_base_with_low_battery(agent_location, base_location):
-    # Logic to calculate the action that moves the agent towards the base
+    # Check if the agent is already at the base
+    if np.array_equal(agent_location, base_location):
+        return None  # No action needed, agent is already at the base
+
+    # Otherwise, calculate the direction towards the base
     direction = np.array(base_location) - np.array(agent_location)
-    return gaussian_sample(direction, std_dev= 0.1)  # You might adjust the std_dev as needed
+    return gaussian_sample(direction, std_dev=0.1)
 
 def foraging_behavior(env, observation, agent, std_dev=0.5):
     carrying = env.get_carrying(agent)
@@ -53,7 +62,7 @@ def foraging_behavior(env, observation, agent, std_dev=0.5):
         new_action = gaussian_sample(mean_direction, std_dev)
         return new_action
 
-env = ForagingEnvironment(num_agents=50, size = 25, render_mode="human", show_fov = False, draw_numbers=False, num_resources=200)
+env = ForagingEnvironment(num_agents=10, size = 25, render_mode="human", show_fov = False, draw_numbers=False, num_resources=200)
 env.reset(seed=42)
 battery_safety_margin = 0 # Robot's will not assume perfect knowlege of their battery levels 
 # Define the maximum distance to the base as a threshold
