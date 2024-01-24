@@ -177,14 +177,19 @@ class ForagingEnvironment(AECEnv):
 
         # Check if the agent's battery level is below the threshold
         return self._battery_level[agent] <= max_distance_to_base
-
     
     def _is_location_valid(self, location):
-        # Check if the location is occupied by any agent
+        CRITICAL_BATTERY_LEVEL = 10  # Define a threshold for low battery
         for other_agent, agent_location in self._agent_locations.items():
-            if np.array_equal(location, agent_location) and self._battery_level[other_agent] > 0:
-                return False
-        return True
+            if np.array_equal(location, agent_location):
+                # Check if the agent is alive with sufficient battery
+                if self._battery_level[other_agent] > CRITICAL_BATTERY_LEVEL:
+                    return False  # Location is occupied by an active agent
+                # Check if the agent with low battery is not at the base
+                if self._battery_level[other_agent] <= CRITICAL_BATTERY_LEVEL and not np.array_equal(agent_location, self._home_base_location):
+                    return False  # Agent with low battery but not at base is blocking
+        return True  # Location is either not occupied or occupied by non-blocking agent
+
     
     def _simple_avoidance(self, agent, direction):
         # Check alternative directions for avoidance
@@ -260,7 +265,7 @@ class ForagingEnvironment(AECEnv):
                 
                 # Check if the agent's battery level is zero
                 is_battery_depleted = self._battery_level[agent] == 0
-
+                
                 # Determine the agent's color based on its status
                 if is_battery_depleted:
                     agent_color = (0, 0, 0)  # Black color for zero battery
@@ -290,12 +295,17 @@ class ForagingEnvironment(AECEnv):
                 # Check if the agent is carrying a resource
                 is_carrying_resource = self._carrying[agent]
                 
+                # Check if the agent's battery is low
+                is_battery_low = self._battery_level[agent] < 10
+                
                 # Check if the agent's battery level is zero
                 is_battery_depleted = self._battery_level[agent] == 0
 
                 # Determine the agent's color based on its status
                 if is_battery_depleted:
                     agent_color = (0, 0, 0)  # Black color for zero battery
+                elif is_battery_low:
+                    agent_color = (255,0,0) # Red color if battery is low 
                 elif is_carrying_resource:
                     agent_color = (0, 255, 0)  # Green color if carrying a resource
                 else:
@@ -379,7 +389,7 @@ class ForagingEnvironment(AECEnv):
         # Draw the text on the canvas
         canvas.blit(text_surface, text_position)
         
-                # Initialize position for the key; adjust x_offset to place the key on the right
+        # Initialize position for the key; adjust x_offset to place the key on the right
         x_offset, y_offset = self.window_size + 10, 10  
         line_height = 30  # Space between lines
 
@@ -390,28 +400,6 @@ class ForagingEnvironment(AECEnv):
         key_title_surface = font.render("Key:", True, (0, 0, 0))
         self.window.blit(key_title_surface, (x_offset, y_offset))
         y_offset += line_height
-
-        # # Agent states
-        # agent_states = {
-        #     "Blue": "Searching",
-        #     "Green": "Found Resource, Returning",
-        #     "Black": "Dead Battery"
-        # }
-
-        # for color, state in agent_states.items():
-        #     state_surface = font.render(f"{color}: {state}", True, (255, 255, 255))
-        #     self.window.blit(state_surface, (x_offset, y_offset))
-        #     y_offset += line_height
-
-        # # Number of agents
-        # num_agents_surface = pygame.font.SysFont(None, 24).render(f"Active Agents: {num_active_agents}", True, (255, 255, 255))
-        # self.window.blit(num_agents_surface, (x_offset, y_offset))
-        # y_offset += line_height
-
-        # # Current number of resources
-        # num_resources_surface = font.render(f"Current Resources: {len(self._resources_location)}", True, (255, 255, 255))
-        # self.window.blit(num_resources_surface, (x_offset, y_offset))
-        # y_offset += line_height
         
         if self.render_mode == "human":
             # The following line copies our drawings from `canvas` to the visible window
