@@ -1,7 +1,9 @@
 from Foraging_World import ForagingEnvironment
 import numpy as np
 import pygame
-import random
+
+## Foraging Test Without Communication
+## Agents do not communicate and merely enact basic foraging and retrieval algorithms
 
 def manhattan_distance(a, b):
     return abs(a[0] - b[0]) + abs(a[1] - b[1])
@@ -30,18 +32,12 @@ def return_to_base_with_low_battery(agent_location, base_location):
     direction = np.array(base_location) - np.array(agent_location)
     return gaussian_sample(direction, std_dev=0.1)
 
-def communication_behavior(agent, observation, env):
-    # Randomly choose to send a message or not
-    # For example, 10% chance to send a message
-    communication_action = 1  # Send a message
-    return communication_action
-
 def foraging_behavior(env, observation, agent, std_dev=0.5):
     carrying = env.get_carrying(agent)
     visible_resources = observation["resources"]
     agent_location = observation["agent_location"]
     base_location = observation["home_base"]
-    base_proximity_threshold = 1  # Define how close is considered 'near' the base
+    base_proximity_threshold = 5  # Define how close is considered 'near' the base
 
     # Calculate distance to base
     distance_to_base = np.linalg.norm(np.array(base_location) - np.array(agent_location))
@@ -63,16 +59,14 @@ def foraging_behavior(env, observation, agent, std_dev=0.5):
 
         new_action = gaussian_sample(mean_direction, std_dev)
         return new_action
-    
 
-env = ForagingEnvironment(num_agents=25, size = 25, render_mode="human", show_fov = True, draw_numbers=False, num_resources=200)
+env = ForagingEnvironment(num_agents=20, size = 25, render_mode="human", show_fov = False, draw_numbers=False, num_resources=200)
 env.reset(seed=42)
 battery_safety_margin = 0 # Robot's will not assume perfect knowlege of their battery levels 
 # Define the maximum distance to the base as a threshold
 min_battery_level = env.size
 base_location = [env.size // 2, env.size // 2]  # Assuming the base is at the center
 exit_simulation = False  # Flag to indicate whether to exit the simulation
-
 
 
 for agent in env.agent_iter():
@@ -91,17 +85,15 @@ for agent in env.agent_iter():
     
     if not env.paused:
         if termination or truncation:
-            combined_action = (None, None)
+            action = None
         elif should_return_to_base(observation["battery_level"], min_battery_level):
-            movement_action = return_to_base_with_low_battery(observation["agent_location"], base_location)
-            communication_action = communication_behavior(agent, observation, env)
-            combined_action = (movement_action, communication_action)
+            action = return_to_base_with_low_battery(observation["agent_location"], base_location)
         else:
-            movement_action = foraging_behavior(env, observation, agent)
-            communication_action = communication_behavior(agent, observation, env)
-            combined_action = (movement_action, communication_action)
+            action = foraging_behavior(env, observation, agent)
 
-        env.step(combined_action)
+
+
+        env.step(action)
         
     # Check if all agents are terminated, then pause
     if all(env.terminations.values()):
