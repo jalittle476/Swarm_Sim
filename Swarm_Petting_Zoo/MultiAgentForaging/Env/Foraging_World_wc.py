@@ -344,7 +344,7 @@ class ForagingEnvironment(AECEnv):
                 )
 
        # Visualize the FOV
-        fov = self.fov  # Adjust this if you've defined FOV elsewhere
+        fov = self.fov  
 
         if self.show_fov:
             
