@@ -6,15 +6,13 @@ import numpy as np
 import pygame
 
 ## TODO Implement Communication Methods
-## TODO Implement Auctions and Trading
 
 class CoverageEnvironment(AECEnv):
     metadata = {"name": "coverage_environment_v0", "render_fps": 1000}
 
-    def __init__(self, num_agents, render_mode=None, size=20, seed=255, num_resources=5, fov=2, show_fov = False, show_gridlines = False, draw_numbers = False, record_sim = False):
+    def __init__(self, num_agents, render_mode=None, size=20, seed=255, fov=2, show_fov = False, show_gridlines = False, draw_numbers = False, record_sim = False):
         self.np_random = np.random.default_rng(seed)
         self.size = size  # The size of the square grid
-        self.num_resources = num_resources
         self.fov = fov
         self.show_fov = show_fov 
         self.render_mode = render_mode
@@ -24,7 +22,6 @@ class CoverageEnvironment(AECEnv):
         self.paused = False
         self.record_sim = record_sim
         self.frame_count = 0
-        self.initial_battery_level = 4 * size # They could explore the perimeter of the space 
         
         pygame.init()
         self.window = None
@@ -44,13 +41,14 @@ class CoverageEnvironment(AECEnv):
         self.observation_space = spaces.Dict(
             {
                 "agent_location": spaces.Box(0, size - 1, shape=(2,), dtype=int),
-                "home_base": spaces.Box(0, size - 1, shape=(2,), dtype=int),
-                "resources": spaces.Box(0, size - 1, shape=(2,), dtype=int),
-                "battery_level": spaces.Box(0, size - 1, shape=(2,), dtype=int),
+                "local_map": spaces.Box(0, 1, shape=(fov*2+1, fov*2+1), dtype=int),  # Adjust size based on FOV
                 "messages": spaces.Box(0, 255, shape=(size, size), dtype=int)
 
             }
         )
+        
+        #Grid to track coverage, each cell inititally set to 0
+        self.coverage_grid = np.zeros((self.size,self.size), dtype = int) 
         
         self.communication_action_space = spaces.Discrete(2)  # Two options: Send or Acknowledge
         self.action_space = spaces.Tuple((spaces.Discrete(4), self.communication_action_space))
@@ -70,26 +68,17 @@ class CoverageEnvironment(AECEnv):
         first time.
         """
         
-
-
     def reset(self, seed=None, options=None):
-        # If you're extending another class, call its reset method (if needed)
-        #super().reset(seed=seed)
-        # self.active_agents = set(self.possible_agents)
-        
-        # Home base is at the center of the grid
-        self._home_base_location = np.array([self.size // 2, self.size // 2])
-        
-        # Initialize agent locations, ensuring they don't overlap with home base
-        self._agent_locations = {agent: self._home_base_location + np.array([1, 0]) for agent in self.possible_agents}
+         # Optional: Reset random seed
+        if seed is not None:
+            self.np_random = np.random.default_rng(seed)
 
-        # Resources are generated randomly, ensuring they don't overlap with agents or home base
-        self._resources_location = self._generate_resources(self.num_resources)
+        # Initialize or reset agent locations
+        # For example, randomize starting locations or set them to specific points
+        self._agent_locations = self._initialize_agent_locations()
 
-        # Reset carrying status and battery level for each agent
-        self._carrying = {agent: False for agent in self.possible_agents}
-        
-        self._battery_level = {agent: self.initial_battery_level for agent in self.possible_agents}
+        # Reset the coverage grid to all zeros
+        self.coverage_grid = np.zeros((self.size, self.size), dtype=int)
 
         # Set the initial agent selection
         self.agent_selection = self.possible_agents[0]
@@ -103,85 +92,103 @@ class CoverageEnvironment(AECEnv):
         self.truncations = {agent: False for agent in self.agents}
         self.infos = {agent: {} for agent in self.agents}
 
-        # Return observation for the first agent and general info
-        return self._get_obs(self.agent_selection), self._get_info(self.agent_selection)
+        # Return observation for the first agent
+        return self._get_obs(self.agent_selection)
+    
+    def _initialize_agent_locations(self):
+        locations = {}
+        for agent in self.possible_agents:
+            while True:
+                location = tuple(self.np_random.integers(0, self.size, size=2))
+                if location not in locations.values():  # Ensure no overlap
+                    locations[agent] = location
+                    break
+        return locations
 
     def step(self, action):
         agent = self.agent_selection  # Get the current agent
-        movement_action, communication_action = action # unpack the action
+        movement_action, communication_action = action  # Unpack the action
 
         # Initialize reward, termination, and truncation
         reward = 0
         terminated = False
         truncation = False
 
-        # Check if the agent's battery level is zero or if the agent is already terminated
-        if self._battery_level[agent] == 0 or self.terminations[agent] or movement_action is None:
-            self.terminations[agent] = True  # Mark the agent as terminated
-
-            # Check if all agents are terminated
-            if all(self.terminations.values()):
-                terminated = True
-                reward = -100  # Adjust this based on your reward scheme
-
-                observation, _, _, truncation, info = self.last()
-                return observation, reward, terminated, truncation, info
-
-            # Skip the rest of the step for this agent
-            self._update_agent_selection()
-            return
-
-        direction = self._action_to_direction[movement_action]
-        
-        # Calculate the potential new location
-        new_location = self._agent_locations[agent] + direction
-        
-        # Check if the new location is not occupied by another agent
-        if not self._is_location_valid(agent, new_location):
-            # Try to avoid other agent
-            new_location = self._simple_avoidance(agent,direction)
-        
-        # Move the agent to available space
-        self._agent_locations[agent] = np.clip(
-            new_location,           0, self.size - 1
-        )
-        
-         # Process communication action
-        self._process_communication(agent, communication_action)
-        
-        # Reduce battery level
-        self._battery_level[agent] -= 1
-
-        # Check if the agent is on a resource location
-        for i in range(len(self._resources_location)):
-            if np.array_equal(self._agent_locations[agent], self._resources_location[i]) and not self._carrying[agent]:
-                self._carrying[agent] = True
-                self._resources_location = np.delete(self._resources_location, i, axis=0)
-                break
-
-        # Check if the agent has returned to the base with a resource
-        if np.array_equal(self._agent_locations[agent], self._home_base_location) and self._carrying[agent]:
-            reward = 1
-            self._carrying[agent] = False
-            self._battery_level[agent] = 100
-
-       # Check termination conditions
-        if len(self._resources_location) == 0 and not any(self._carrying.values()):
+        # Check termination conditions based on coverage objective
+        if self._check_coverage_completion():
             terminated = True
 
+        # Process movement
+        direction = self._action_to_direction[movement_action]
+        new_location = self._agent_locations[agent] + direction
+        
+        # Clip the new_location to ensure it's within grid bounds
+        new_location = np.clip(new_location,0,self.size -1)
+
+        # Check if the new location is valid and not occupied by another agent
+        if self._is_location_valid(agent, new_location):
+            self._agent_locations[agent] = np.clip(new_location, 0, self.size - 1)
+
+            # Update coverage grid
+            self.coverage_grid[new_location[0], new_location[1]] = 1  # Mark as covered
+
+            # Calculate reward based on new coverage or other criteria
+            reward = self._calculate_coverage_reward(agent)
+
+        # Process communication action (if necessary)
+        self._process_communication(agent, communication_action)
+
         observation = self._get_obs(agent)
-        info = self._get_info(agent)
+        info = {}
 
         # Update selected agent for the next step
         self._update_agent_selection()
-        
+
         if all(self.terminations.values()):
             terminated = True
-            
+
         if self.render_mode == "human":
-            self._render()
+            self.render()
 
         return observation, reward, terminated, truncation, info
+
+    def _calculate_coverage_reward(self, agent):
+        # Get the agent's current location
+        current_location = self._agent_locations[agent]
+
+        # Check if the current location has already been covered
+        if self.coverage_grid[current_location[0], current_location[1]] == 1:
+            # Penalize slightly for revisiting a covered area
+            return -0.1
+        else:
+            # Reward more for covering a new area
+            return 1
+
+        # Note: The reward values can be adjusted based on your simulation's needs.
+
+
+    def _check_coverage_completion(self):
+        # Calculate the total number of cells in the grid
+        total_cells = self.size * self.size
+
+        # Count the number of cells that have been covered
+        covered_cells = np.sum(self.coverage_grid)
+
+        # Calculate the percentage of the grid that's been covered
+        coverage_percentage = (covered_cells / total_cells) * 100
+
+        # Check if the coverage is at least 95%
+        return coverage_percentage >= 95
+
+    def _is_location_valid(self, agent, location):
+
+        # For other locations, check if they are occupied by an agent
+        for other_agent, agent_location in self._agent_locations.items():
+            if np.array_equal(location, agent_location):
+                return False  # Location is occupied by an agent
+
+        return True  # Location is not occupied and is not the home base
+
     
     def _process_communication(self, agent, communication_action):
         print(f"Processing communication for {agent}, Action: {communication_action}")
@@ -192,37 +199,19 @@ class CoverageEnvironment(AECEnv):
                 print(f"{agent} sent a message to {other_agent}: '{message}'")
 
     def _is_within_fov(self, agent, other_agent):
-        # Calculate if other_agent is within agent's fov
-        distance = np.linalg.norm(self._agent_locations[agent] - self._agent_locations[other_agent])
+        # Convert tuples back to numpy arrays for subtraction
+        agent_location = np.array(self._agent_locations[agent])
+        other_agent_location = np.array(self._agent_locations[other_agent])
+
+        # Calculate the distance
+        distance = np.linalg.norm(agent_location - other_agent_location)
+
+        # Check if the distance is within the field of view
         within_fov = distance <= self.fov
-        if(within_fov):
+        if within_fov:
             print(f"Checking FOV: {agent} -> {other_agent}, Distance: {distance}, Within FOV: {within_fov}")
         return within_fov
-    
-    def _should_return_to_base(self, agent):
-        # Calculate the maximum distance from any point to the base
-        max_distance_to_base = (self.size // 2) * 2  # Adjust this calculation if necessary
 
-        # Check if the agent's battery level is below the threshold
-        return self._battery_level[agent] <= max_distance_to_base
-    
-    def _is_location_valid(self, agent, location):
-        # Check if the location is the home base
-        if np.array_equal(location, self._home_base_location):
-            return True  # The home base can hold any number of agents
-
-        # If the agent is carrying a resource, check if the location is occupied by another resource
-        if self._carrying[agent]:
-            for resource_location in self._resources_location:
-                if np.array_equal(location, resource_location):
-                    return False  # Location is occupied by a resource
-
-        # For other locations, check if they are occupied by an agent
-        for other_agent, agent_location in self._agent_locations.items():
-            if np.array_equal(location, agent_location):
-                return False  # Location is occupied by an agent
-
-        return True  # Location is not occupied and is not the home base
 
     
     def _simple_avoidance(self, agent, direction):
@@ -256,121 +245,57 @@ class CoverageEnvironment(AECEnv):
         # If all agents are terminated, you can handle it as you see fit (e.g., set agent_selection to None)
         self.agent_selection = None
 
-    def _render(self):
+    def render(self):
         
-        if self.window is None and self.render_mode == "human":
-            self.window = pygame.display.set_mode(
-                (self.window_size, self.window_size))
-        if self.clock is None and self.render_mode == "human":
+        # Only proceed with rendering if the render mode is set to "human"
+        if self.render_mode != "human":
+            return
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                quit()
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_p:  # Press 'p' to toggle pause
+                    self.paused = not self.paused
+                    
+        # Skip the rest of the rendering if paused
+        if self.paused:
+            # You can optionally add a pause message display here
+            return
+
+        # Initialize the window and clock if they haven't been already
+        if self.window is None:
+            self.window = pygame.display.set_mode((self.window_size, self.window_size))
+        if self.clock is None:
             self.clock = pygame.time.Clock()
 
         canvas = pygame.Surface((self.window_size, self.window_size))
         canvas.fill((255, 255, 255))
-        pix_square_size = (
-            self.window_size / self.size
-        )  # The size of a single grid square in pixels
+        pix_square_size = (self.window_size / self.size)  # The size of a single grid square in pixels
 
-        # Draw the home base
-        pygame.draw.rect(
-            canvas,
-            (102, 51, 0),
-            pygame.Rect(
-                pix_square_size * self._home_base_location,
-                (pix_square_size, pix_square_size),
-            ),
-        )
+        # Draw the coverage grid
+        for x in range(self.size):
+            for y in range(self.size):
+                if self.coverage_grid[x, y] == 1:
+                    pygame.draw.rect(canvas, (0, 255, 0),  # Green for covered areas
+                                    pygame.Rect(x * pix_square_size, y * pix_square_size, pix_square_size, pix_square_size))
 
-        # Draw the resources
-        for resource_location in self._resources_location:
-            pygame.draw.rect(
-                canvas,
-                (0, 102, 0),
-                pygame.Rect(
-                    pix_square_size * resource_location,
-                    (pix_square_size, pix_square_size),
-                ),
-            )
-
-        if self.draw_numbers: 
-             # Now we draw all the agents
-            for agent, location in self._agent_locations.items():
-                # Check if the agent is carrying a resource
-                is_carrying_resource = self._carrying[agent]
-                
-                # Check if the agent's battery level is zero
-                is_battery_depleted = self._battery_level[agent] == 0
-                
-                # Determine the agent's color based on its status
-                if is_battery_depleted:
-                    agent_color = (0, 0, 0)  # Black color for zero battery
-                elif is_carrying_resource:
-                    agent_color = (0, 102, 0)  # Green color if carrying a resource
-                else:
-                    agent_color = (0, 0, 255)  # Blue color otherwise
-
-                pygame.draw.circle(
-                    canvas,
-                    agent_color,  # Use the determined color
-                    (location + 0.5) * pix_square_size,
-                    pix_square_size / 3,
-                )
-
-                # Draw the agent's index number
-                font = pygame.font.SysFont(None, 20)  # Choose an appropriate font size
-                text_surface = font.render(str(idx), True, (0, 0, 0))  # White text
-                # Position the text above the agent
-                text_position = ((location[0] + 0.3) * pix_square_size, (location[1] - 0.2) * pix_square_size)  # Adjust this position as needed
-                canvas.blit(text_surface, text_position)
-        
-        else:
-            
-            # Now we draw all the agents
-            for agent, location in self._agent_locations.items():
-                # Check if the agent is carrying a resource
-                is_carrying_resource = self._carrying[agent]
-                
-                # Check if the agent's battery is low
-                is_battery_low = self._battery_level[agent] < self.size
-                
-                # Check if the agent's battery level is zero
-                is_battery_depleted = self._battery_level[agent] == 0
-
-                # Determine the agent's color based on its status
-                if is_battery_depleted:
-                    agent_color = (0, 0, 0)  # Black color for zero battery
-                elif is_battery_low:
-                    agent_color = (255,0,0) # Red color if battery is low 
-                elif is_carrying_resource:
-                    agent_color = (0, 255, 0)  # Green color if carrying a resource
-                else:
-                    agent_color = (0, 0, 255)  # Blue color otherwise
-
-                pygame.draw.circle(
-                    canvas,
-                    agent_color,  # Use the determined color
-                    (location + 0.5) * pix_square_size,
-                    pix_square_size / 3,
-                )
+        # Draw agents
+        for agent, location in self._agent_locations.items():
+            pygame.draw.circle(canvas, (0, 0, 255),  # Blue color for agents
+                            (int((location[0] + 0.5) * pix_square_size), int((location[1] + 0.5) * pix_square_size)),
+                            int(pix_square_size / 3))
             
         
         
+    # Optional: Draw gridlines
         if self.show_gridlines:
-            # Finally, add some gridlines
             for x in range(self.size + 1):
-                pygame.draw.line(
-                    canvas,
-                    0,
-                    (0, pix_square_size * x),
-                    (self.window_size, pix_square_size * x),
-                    width=3,
-                )
-                pygame.draw.line(
-                    canvas,
-                    0,
-                    (pix_square_size * x, 0),
-                    (pix_square_size * x, self.window_size),
-                    width=3,
-                )
+                pygame.draw.line(canvas, (0, 0, 0),  # Black lines for grid
+                                (x * pix_square_size, 0), (x * pix_square_size, self.window_size), 1)
+                pygame.draw.line(canvas, (0, 0, 0),
+                                (0, x * pix_square_size), (self.window_size, x * pix_square_size), 1)
 
        # Visualize the FOV
         fov = self.fov  # Adjust this if you've defined FOV elsewhere
@@ -399,13 +324,6 @@ class CoverageEnvironment(AECEnv):
 
             # Blit the FOV surface onto the main canvas
             canvas.blit(fov_surface, (0, 0))
-
-          # Pausing code
-        if self.paused:
-            font = pygame.font.SysFont(None, 55)
-            pause_surf = font.render('Paused', True, (255, 0, 0))
-            pause_rect = pause_surf.get_rect(center=(self.window_size/2, self.window_size/2))
-            self.window.blit(pause_surf, pause_rect)
         
         
         # Determine the number of active agents based on the terminations attribute
@@ -457,34 +375,35 @@ class CoverageEnvironment(AECEnv):
 
 
     def _get_obs(self, agent):
-        # Define the agent's field of view (FOV)
-        fov = self.fov
-
-        # Get the coordinates of the top-left and bottom-right corners of the FOV
-        tl_y = max(0, self._agent_locations[agent][0] - fov)
-        tl_x = max(0, self._agent_locations[agent][1] - fov)
-        br_y = min(self.size, self._agent_locations[agent][0] + fov + 1)
-        br_x = min(self.size, self._agent_locations[agent][1] + fov + 1)
-
-        # Check each resource
-        visible_resources = []
-        for resource_location in self._resources_location:
-            # If the resource is within the FOV, add it to the list of visible resources
-            if tl_y <= resource_location[0] < br_y and tl_x <= resource_location[1] < br_x:
-                visible_resources.append(resource_location)
+        # Centered around the agent's location, extract the local map
+        print(f"Agent: {agent}")
+        print(f"Agent Locations: {self._agent_locations}")
+        print(f"Agent Messages: {self.agent_messages}")
+        local_map_center = self.agent_locations[agent]
+        local_map = self._extract_local_map(local_map_center)
 
         return {
             "agent_location": self._agent_locations[agent],
-            "home_base": self._home_base_location,
-            "resources": visible_resources,
-            "battery_level": self._battery_level[agent],
+            "local_map" : local_map,
             "messages": self.agent_messages[agent]
         }
 
-    def _get_info(self, agent):
-        return {
-            "carrying": self._carrying[agent],
-            "remaining_resources": len(self._resources_location)}
+        
+    def _extract_local_map(self, center):
+        # Define the range for the local map
+        top_left = np.maximum(center - self.fov, 0)
+        bottom_right = np.minimum(center + self.fov + 1, self.size)
+
+        # Extract the local map from the coverage grid
+        local_map = np.zeros((2 * self.fov + 1, 2 * self.fov + 1), dtype=int)
+        local_map_section = self.coverage_grid[top_left[0]:bottom_right[0], top_left[1]:bottom_right[1]]
+
+        # Position the section in the center of the local map
+        start_idx = self.fov - center + top_left
+        end_idx = start_idx + local_map_section.shape
+
+        local_map[start_idx[0]:end_idx[0], start_idx[1]:end_idx[1]] = local_map_section
+        return local_map
 
     def observe(self, agent):
         """
@@ -494,65 +413,7 @@ class CoverageEnvironment(AECEnv):
         """
         return self._get_obs(agent)
 
-    def close(self):
-        if self.window is not None:
-            pygame.display.quit()
-            pygame.quit()
-
-    def _generate_resources(self, num_resources):
-        # Generate a list of all locations
-        all_locations = {(x, y) for x in range(self.size) for y in range(self.size)}
-
-        # Remove agent locations and the home base location
-        for agent_location in self._agent_locations.values():
-            all_locations.discard(tuple(agent_location))
-        
-        all_locations.discard(tuple(self._home_base_location))
-
-        # Convert to a list and shuffle the remaining locations
-        all_locations = list(all_locations)
-        self.np_random.shuffle(all_locations)
-        
-        
-        food_block = {(x,y) for x in range(10) for y in range(10)}
-        food_block_list = list(food_block)
-        
-        #print(food_block)
-        #return np.array(all_locations[:num_resources])    
-        
-        return np.array(food_block_list)
-
-    # Below are functions related to the foraging aspects of the simulation
-
-    def get_carrying(self, agent):
-        return self._carrying[agent]
-
-    def get_home_base_location(self):
-        return self._home_base_location
+    # Below are functions related to the coverage aspects of the simulation
 
     def get_agent_location(self, agent):
         return self._agent_locations[agent]
-
-    def get_agent_awareness(self, agent, radius=1):
-        # Get the agent's location
-        agent_x, agent_y = self._agent_locations[agent]
-
-        # Initialize an empty list to store the contents of the cells within the agent's area of awareness
-        awareness = []
-
-        # Check each cell within the radius of the agent's location
-        for dx in range(-radius, radius + 1):
-            for dy in range(-radius, radius + 1):
-                x = agent_x + dx
-                y = agent_y + dy
-
-                # Check if the cell is within the grid
-                if 0 <= x < self.size and 0 <= y < self.size:
-                    if (x, y) in self._resources_location:
-                        awareness.append('resource')
-                    elif (x, y) == tuple(self._home_base_location):
-                        awareness.append('home_base')
-                    else:
-                        awareness.append('empty')
-
-        return awareness
