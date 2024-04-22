@@ -10,7 +10,7 @@ import pygame
 class CoverageEnvironment(AECEnv):
     metadata = {"name": "coverage_environment_v0", "render_fps": 1000}
 
-    def __init__(self, num_agents, render_mode=None, size=20, seed=255, fov=2, show_fov = False, show_gridlines = False, draw_numbers = False, record_sim = False):
+    def __init__(self, num_agents, max_steps, render_mode=None, size=20, seed=255, fov=2, show_fov = False, show_gridlines = False, draw_numbers = False, record_sim = False):
         self.np_random = np.random.default_rng(seed)
         self.size = size  # The size of the square grid
         self.fov = fov
@@ -22,6 +22,8 @@ class CoverageEnvironment(AECEnv):
         self.paused = False
         self.record_sim = record_sim
         self.frame_count = 0
+        self.max_steps = max_steps  # Maximum steps per episode
+        self.current_step = 0  # Current step counter
         
         pygame.init()
         self.window = None
@@ -34,7 +36,7 @@ class CoverageEnvironment(AECEnv):
         self.agents = self.possible_agents.copy()
         
         # Communication related initialization
-        self.agent_messages = {agent: [] for agent in self.possible_agents}  # Stores incoming messages for each agent
+        #self.agent_messages = {agent: [] for agent in self.possible_agents}  # Stores incoming messages for each agent
         self.agent_locations = {agent: np.array([0, 0]) for agent in self.possible_agents}  # Initial locations of agents
 
         # Initialize observation space and action space (as provided earlier)
@@ -42,7 +44,7 @@ class CoverageEnvironment(AECEnv):
             {
                 "agent_location": spaces.Box(0, size - 1, shape=(2,), dtype=int),
                 "local_map": spaces.Box(0, 1, shape=(fov*2+1, fov*2+1), dtype=int),  # Adjust size based on FOV
-                "messages": spaces.Box(0, 255, shape=(size, size), dtype=int)
+                #"messages": spaces.Box(0, 255, shape=(size, size), dtype=int)
 
             }
         )
@@ -50,8 +52,8 @@ class CoverageEnvironment(AECEnv):
         #Grid to track coverage, each cell inititally set to 0
         self.coverage_grid = np.zeros((self.size,self.size), dtype = int) 
         
-        self.communication_action_space = spaces.Discrete(2)  # Two options: Send or Acknowledge
-        self.action_space = spaces.Tuple((spaces.Discrete(4), self.communication_action_space))
+        #self.communication_action_space = spaces.Discrete(2)  # Two options: Send or Acknowledge
+        self.action_space = spaces.Discrete(4)
 
         self._action_to_direction = {
             0: np.array([1, 0]),
@@ -82,15 +84,16 @@ class CoverageEnvironment(AECEnv):
 
         # Set the initial agent selection
         self.agent_selection = self.possible_agents[0]
-        
         self.agents = self.possible_agents.copy()
-        
         self.agents = self.possible_agents[:]
         self.rewards = {agent: 0 for agent in self.agents}
         self._cumulative_rewards = {agent: 0 for agent in self.agents}
         self.terminations = {agent: False for agent in self.agents}
         self.truncations = {agent: False for agent in self.agents}
         self.infos = {agent: {} for agent in self.agents}
+
+        self.current_step = 0  # Reset step count at the start of an episode
+
 
         # Return observation for the first agent
         return self._get_obs(self.agent_selection)
@@ -106,51 +109,49 @@ class CoverageEnvironment(AECEnv):
         return locations
 
     def step(self, action):
+        self.current_step += 1  # Increment the step counter
         agent = self.agent_selection  # Get the current agent
-        movement_action, communication_action = action  # Unpack the action
+        movement_action = action  # Unpack the action
 
         # Initialize reward, termination, and truncation
         reward = 0
         terminated = False
-        truncation = False
-
-        # Check termination conditions based on coverage objective
-        if self._check_coverage_completion():
-            terminated = True
+        truncation = self.current_step >= self.max_steps  # Check if current step exceeds max steps
 
         # Process movement
         direction = self._action_to_direction[movement_action]
         new_location = self._agent_locations[agent] + direction
-        
-        # Clip the new_location to ensure it's within grid bounds
-        new_location = np.clip(new_location,0,self.size -1)
+        new_location = np.clip(new_location, 0, self.size - 1)  # Ensure within bounds
 
-        # Check if the new location is valid and not occupied by another agent
+        # Check if the new location is valid
         if self._is_location_valid(agent, new_location):
-            self._agent_locations[agent] = np.clip(new_location, 0, self.size - 1)
+            self._agent_locations[agent] = new_location
+            self.coverage_grid[new_location[0], new_location[1]] = 1  # Update coverage
+            reward = self._calculate_coverage_reward(agent)  # Calculate reward
 
-            # Update coverage grid
-            self.coverage_grid[new_location[0], new_location[1]] = 1  # Mark as covered
-
-            # Calculate reward based on new coverage or other criteria
-            reward = self._calculate_coverage_reward(agent)
-
-        # Process communication action (if necessary)
-        self._process_communication(agent, communication_action)
-
-        observation = self._get_obs(agent)
-        info = {}
-
-        # Update selected agent for the next step
-        self._update_agent_selection()
-
-        if all(self.terminations.values()):
+        # Check coverage completion
+        if self._check_coverage_completion():
             terminated = True
 
+        # Determine termination based on coverage or step count
+        if truncation:
+            terminated = True
+
+        # Fetch new observation
+        observation = self._get_obs(agent)
+        info = {'step_count': self.current_step}
+
+        # Update agent selection for next step
+        self._update_agent_selection()
+
+        # Rendering and debug
         if self.render_mode == "human":
             self.render()
 
+        print(f"Step: {self.current_step}, Terminated: {terminated}, Truncation: {truncation}")
+
         return observation, reward, terminated, truncation, info
+
 
     def _calculate_coverage_reward(self, agent):
         # Get the agent's current location
@@ -208,8 +209,8 @@ class CoverageEnvironment(AECEnv):
 
         # Check if the distance is within the field of view
         within_fov = distance <= self.fov
-        if within_fov:
-            print(f"Checking FOV: {agent} -> {other_agent}, Distance: {distance}, Within FOV: {within_fov}")
+        # if within_fov:
+        #      print(f"Checking FOV: {agent} -> {other_agent}, Distance: {distance}, Within FOV: {within_fov}")
         return within_fov
 
 
@@ -376,16 +377,16 @@ class CoverageEnvironment(AECEnv):
 
     def _get_obs(self, agent):
         # Centered around the agent's location, extract the local map
-        print(f"Agent: {agent}")
-        print(f"Agent Locations: {self._agent_locations}")
-        print(f"Agent Messages: {self.agent_messages}")
+        # print(f"Agent: {agent}")
+        # print(f"Agent Locations: {self._agent_locations}")
+        #print(f"Agent Messages: {self.agent_messages}")
         local_map_center = self.agent_locations[agent]
         local_map = self._extract_local_map(local_map_center)
 
         return {
             "agent_location": self._agent_locations[agent],
-            "local_map" : local_map,
-            "messages": self.agent_messages[agent]
+            "local_map" : local_map
+            #"messages": self.agent_messages[agent]
         }
 
         

@@ -1,4 +1,3 @@
-from Foraging_World import ForagingEnvironment
 
 num_agents = 3
 env = ForagingEnvironment(num_agents, render_mode="human")
