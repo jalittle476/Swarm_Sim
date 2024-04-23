@@ -10,26 +10,43 @@ env = CoverageEnvironment(num_agents=2, max_steps=1000, render_mode='human', siz
 num_states = env.size * env.size
 num_actions = env.action_space.n
 q_tables = {agent: {} for agent in env.possible_agents}
-alpha = 0.1
+alpha = 0.3
 gamma = 0.99
-num_episodes = 50  # Number of episodes to run
+num_episodes = 10  # Number of episodes to run
 rewards_per_episode = []
 
 epsilon_start = 1.0
 epsilon_end = 0.1
-epsilon_decay = 0.9995
+epsilon_decay = 0.5
 epsilon = epsilon_start
 
+# def get_state(observation):                                   # number of unexplored tiles
+#     # Simplify the state by focusing on key features
+#     agent_pos = observation['agent_location']
+#     local_map = observation['local_map']
+#     # Example feature: count of uncovered tiles in local map
+#     uncovered_tiles = np.sum(local_map == 0)
+    
+#     # Form a simpler state representation
+#     state = (agent_pos[0], agent_pos[1], uncovered_tiles)
+#     return hash(state)  # Still using hash to ensure uniqueness
+
 def get_state(observation):
-    # Simplify the state by focusing on key features
+    # Extract the agent's grid position
     agent_pos = observation['agent_location']
     local_map = observation['local_map']
-    # Example feature: count of uncovered tiles in local map
-    uncovered_tiles = np.sum(local_map == 0)
-    
-    # Form a simpler state representation
-    state = (agent_pos[0], agent_pos[1], uncovered_tiles)
-    return hash(state)  # Still using hash to ensure uniqueness
+
+    # Convert local map to a binary format: 0 for unexplored, 1 for explored
+    # Assuming '0' indicates unexplored and '1' indicates explored in your local_map setup
+    explored_tiles_binary = (local_map > 0).astype(int).flatten()
+
+    # Combine the agent's position and the binary state of the local map into one tuple
+    state_features = (agent_pos[0], agent_pos[1]) + tuple(explored_tiles_binary)
+
+    # Convert to a hash or another form of unique identifier if needed
+    state = hash(state_features)  # Using hash to ensure a unique state identifier
+
+    return state
 
 def choose_action(agent, state):
     global epsilon

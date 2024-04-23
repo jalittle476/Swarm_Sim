@@ -24,7 +24,7 @@ class CoverageEnvironment(AECEnv):
         self.frame_count = 0
         self.max_steps = max_steps  # Maximum steps per episode
         self.current_step = 0  # Current step counter
-        self.penalty_cap = -5  # Maximum penalty for revisits
+        self.penalty_cap = -10  # Maximum penalty for revisits
         
         pygame.init()
         self.window = None
@@ -112,6 +112,46 @@ class CoverageEnvironment(AECEnv):
                     break
         return locations
 
+    # def step(self, action):
+    #     self.current_step += 1
+    #     agent = self.agent_selection
+    #     moved = False
+    #     tried_actions = set()
+    #     reward = 0
+    #     total_visits = np.sum(self.coverage_grid > 0)
+
+    #     while not moved and len(self._action_to_direction) > len(tried_actions):
+    #         direction = self._action_to_direction[action]
+    #         new_location = np.clip(self._agent_locations[agent] + direction, 0, self.size - 1)
+
+    #         if self._is_location_valid(agent, new_location):
+    #             visits = self.coverage_grid[new_location[0], new_location[1]]
+    #             self._agent_locations[agent] = new_location
+    #             moved = True
+    #             current_reward = self.calculate_discovery_reward(visits, total_visits)
+    #             updated_reward = self.reward_grid[new_location[0], new_location[1]] + current_reward
+
+    #             # Apply cap when updating the grid
+    #             print(f"Before update: {self.reward_grid[new_location[0], new_location[1]]}")
+    #             self.reward_grid[new_location[0], new_location[1]] = max(updated_reward, -5)
+    #             print(f"After update: {self.reward_grid[new_location[0], new_location[1]]}, Current Reward: {current_reward}")
+    #             self.coverage_grid[new_location[0], new_location[1]] += 1
+    #             reward += current_reward
+
+    #         tried_actions.add(action)
+    #         action = (action + 1) % len(self._action_to_direction)
+
+    #     reward += self.check_and_award_completion_bonus()
+    #     terminated = self._check_coverage_completion() or self.current_step >= self.max_steps
+    #     observation = self._get_obs(agent)
+    #     self._update_agent_selection()
+
+    #     if self.render_mode == "human":
+    #         self.render()
+
+    #     info = {'step_count': self.current_step}
+    #     return observation, reward, terminated, self.current_step >= self.max_steps, info
+    
     def step(self, action):
         self.current_step += 1
         agent = self.agent_selection
@@ -119,6 +159,8 @@ class CoverageEnvironment(AECEnv):
         tried_actions = set()
         reward = 0
         total_visits = np.sum(self.coverage_grid > 0)
+
+        #print(f"Step {self.current_step} Start - Agent: {agent}, Initial Action: {action}")
 
         while not moved and len(self._action_to_direction) > len(tried_actions):
             direction = self._action_to_direction[action]
@@ -129,17 +171,17 @@ class CoverageEnvironment(AECEnv):
                 self._agent_locations[agent] = new_location
                 moved = True
                 current_reward = self.calculate_discovery_reward(visits, total_visits)
-                updated_reward = self.reward_grid[new_location[0], new_location[1]] + current_reward
-
-                # Apply cap when updating the grid
-                print(f"Before update: {self.reward_grid[new_location[0], new_location[1]]}")
-                self.reward_grid[new_location[0], new_location[1]] = max(updated_reward, -5)
-                print(f"After update: {self.reward_grid[new_location[0], new_location[1]]}, Current Reward: {current_reward}")
+                #new_cumulative_reward = self.reward_grid[new_location[0], new_location[1]] + current_reward
+                self.reward_grid[new_location[0], new_location[1]] = current_reward
                 self.coverage_grid[new_location[0], new_location[1]] += 1
                 reward += current_reward
 
+                #print(f"Action: {action}, New Location: {new_location}, Visits: {visits + 1}, Immediate Reward: {current_reward}")
+
             tried_actions.add(action)
             action = (action + 1) % len(self._action_to_direction)
+            if not moved and len(tried_actions) < len(self._action_to_direction):
+                #print(f"No valid move. Trying next action: {action}")
 
         reward += self.check_and_award_completion_bonus()
         terminated = self._check_coverage_completion() or self.current_step >= self.max_steps
@@ -150,7 +192,10 @@ class CoverageEnvironment(AECEnv):
             self.render()
 
         info = {'step_count': self.current_step}
+        #print(f"Step {self.current_step} End - Agent: {agent}, Total Step Reward: {reward}, Terminated: {terminated}")
+
         return observation, reward, terminated, self.current_step >= self.max_steps, info
+
 
 
     
@@ -162,7 +207,7 @@ class CoverageEnvironment(AECEnv):
         else:
             # Apply penalties more severely as more of the grid is covered
             penalty = -0.1 * visits * (1 + 2 * coverage_ratio)
-            return max(penalty, -5)  # Ensure the penalty does not go below -5
+            return max(penalty, self.penalty_cap)  # Ensure the penalty does not go below -5
 
     def check_and_award_completion_bonus(self):
         total_cells = self.size * self.size
@@ -227,6 +272,49 @@ class CoverageEnvironment(AECEnv):
         # If all agents are terminated, you can handle it as you see fit (e.g., set agent_selection to None)
         self.agent_selection = None
     
+    # def render(self):
+    #     if self.render_mode != "human":
+    #         return
+
+    #     if self.window is None:
+    #         self.window = pygame.display.set_mode((self.window_size, self.window_size))
+    #     if self.clock is None:
+    #         self.clock = pygame.time.Clock()
+
+    #     canvas = pygame.Surface((self.window_size, self.window_size))
+    #     canvas.fill((255, 255, 255))  # Background color
+    #     pix_square_size = self.window_size / self.size
+    #     font = pygame.font.Font(None, int(pix_square_size / 3))  # Font size based on cell size
+
+    #     max_visits = np.max(self.coverage_grid)
+    #     for x in range(self.size):
+    #         for y in range(self.size):
+    #             visits = self.coverage_grid[x, y]
+    #             if visits > 0:  # Only color cells that have been visited
+    #                 if max_visits > 0:
+    #                     color_intensity = 255 - int(255 * (visits / max_visits))
+    #                 else:
+    #                     color_intensity = 255  # Default light green if max_visits is 0
+    #                 cell_color = (0, color_intensity, 0)
+    #                 pygame.draw.rect(canvas, cell_color, 
+    #                                 pygame.Rect(x * pix_square_size, y * pix_square_size, pix_square_size, pix_square_size))
+
+    #                 # Displaying the value
+    #                 text_surface = font.render(f"{self.reward_grid[x, y]:.2f}", True, (255, 255, 255))
+    #                 text_rect = text_surface.get_rect(center=(x * pix_square_size + pix_square_size / 2,
+    #                                                         y * pix_square_size + pix_square_size / 2))
+    #                 canvas.blit(text_surface, text_rect)
+
+    #       # Draw agents after cells to ensure they are visible on top
+    #     for agent, location in self._agent_locations.items():
+    #         pygame.draw.circle(canvas, (255, 0, 0),  # Using red color for better visibility
+    #                         (int((location[0] + 0.5) * pix_square_size), int((location[1] + 0.5) * pix_square_size)),
+    #                         int(pix_square_size / 4))  # Adjust size as needed
+
+    #     self.window.blit(canvas, canvas.get_rect())
+    #     pygame.display.update()
+    #     self.clock.tick(self.metadata["render_fps"])
+
     def render(self):
         if self.render_mode != "human":
             return
@@ -241,26 +329,22 @@ class CoverageEnvironment(AECEnv):
         pix_square_size = self.window_size / self.size
         font = pygame.font.Font(None, int(pix_square_size / 3))  # Font size based on cell size
 
-        max_visits = np.max(self.coverage_grid)
         for x in range(self.size):
             for y in range(self.size):
                 visits = self.coverage_grid[x, y]
                 if visits > 0:  # Only color cells that have been visited
-                    if max_visits > 0:
-                        color_intensity = 255 - int(255 * (visits / max_visits))
-                    else:
-                        color_intensity = 255  # Default light green if max_visits is 0
+                    color_intensity = 255 - int(255 * (visits / np.max(self.coverage_grid) if np.max(self.coverage_grid) > 0 else 1))
                     cell_color = (0, color_intensity, 0)
                     pygame.draw.rect(canvas, cell_color, 
                                     pygame.Rect(x * pix_square_size, y * pix_square_size, pix_square_size, pix_square_size))
 
-                    # Displaying the value
+                    # Displaying the immediate reward value
                     text_surface = font.render(f"{self.reward_grid[x, y]:.2f}", True, (255, 255, 255))
                     text_rect = text_surface.get_rect(center=(x * pix_square_size + pix_square_size / 2,
                                                             y * pix_square_size + pix_square_size / 2))
                     canvas.blit(text_surface, text_rect)
 
-          # Draw agents after cells to ensure they are visible on top
+        # Draw agents after cells to ensure they are visible on top
         for agent, location in self._agent_locations.items():
             pygame.draw.circle(canvas, (255, 0, 0),  # Using red color for better visibility
                             (int((location[0] + 0.5) * pix_square_size), int((location[1] + 0.5) * pix_square_size)),
@@ -270,7 +354,6 @@ class CoverageEnvironment(AECEnv):
         pygame.display.update()
         self.clock.tick(self.metadata["render_fps"])
 
-        
         
     def _get_obs(self, agent):
         """
