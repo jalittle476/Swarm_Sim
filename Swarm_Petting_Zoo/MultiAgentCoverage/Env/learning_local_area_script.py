@@ -12,12 +12,12 @@ num_actions = env.action_space.n
 q_tables = {agent: {} for agent in env.possible_agents}
 alpha = 0.3
 gamma = 0.99
-num_episodes = 10  # Number of episodes to run
+num_episodes = 50  # Number of episodes to run
 rewards_per_episode = []
 
 epsilon_start = 1.0
-epsilon_end = 0.1
-epsilon_decay = 0.5
+epsilon_end = 0.3
+epsilon_decay = 0.99
 epsilon = epsilon_start
 
 # def get_state(observation):                                   # number of unexplored tiles

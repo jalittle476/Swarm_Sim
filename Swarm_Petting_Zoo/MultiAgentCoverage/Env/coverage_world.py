@@ -180,7 +180,7 @@ class CoverageEnvironment(AECEnv):
 
             tried_actions.add(action)
             action = (action + 1) % len(self._action_to_direction)
-            if not moved and len(tried_actions) < len(self._action_to_direction):
+            #if not moved and len(tried_actions) < len(self._action_to_direction):
                 #print(f"No valid move. Trying next action: {action}")
 
         reward += self.check_and_award_completion_bonus()
