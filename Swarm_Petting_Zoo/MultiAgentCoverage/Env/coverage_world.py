@@ -111,15 +111,14 @@ class CoverageEnvironment(AECEnv):
                     locations[agent] = location
                     break
         return locations
-    
+
     def step(self, action):
         self.current_step += 1
         agent = self.agent_selection
         moved = False
         tried_actions = set()
         reward = 0
-
-        print(f"Step {self.current_step} Start - Agent: {agent}, Initial Action: {action}")
+        total_visits = np.sum(self.coverage_grid > 0)
 
         while not moved and len(self._action_to_direction) > len(tried_actions):
             direction = self._action_to_direction[action]
@@ -129,26 +128,20 @@ class CoverageEnvironment(AECEnv):
                 visits = self.coverage_grid[new_location[0], new_location[1]]
                 self._agent_locations[agent] = new_location
                 moved = True
-                current_reward = self.calculate_discovery_reward() if visits == 0 else max(-0.1 * (visits + 1), self.penalty_cap)
-                capped_reward = max(current_reward, self.penalty_cap)
+                current_reward = self.calculate_discovery_reward(visits, total_visits)
+                updated_reward = self.reward_grid[new_location[0], new_location[1]] + current_reward
 
-                # Update reward grid ensuring that penalty does not exceed the cap
-                existing_reward = self.reward_grid[new_location[0], new_location[1]]
-                new_reward = max(existing_reward + capped_reward, self.penalty_cap)
-                self.reward_grid[new_location[0], new_location[1]] = new_reward
-
+                # Apply cap when updating the grid
+                print(f"Before update: {self.reward_grid[new_location[0], new_location[1]]}")
+                self.reward_grid[new_location[0], new_location[1]] = max(updated_reward, -5)
+                print(f"After update: {self.reward_grid[new_location[0], new_location[1]]}, Current Reward: {current_reward}")
                 self.coverage_grid[new_location[0], new_location[1]] += 1
                 reward += current_reward
 
-                print(f"Action: {action}, New Location: {new_location}, Visits: {visits + 1}, Calculated Reward: {current_reward}, Capped Reward: {capped_reward}, Reward Grid Value: {new_reward}")
-
             tried_actions.add(action)
             action = (action + 1) % len(self._action_to_direction)
-            if len(tried_actions) < len(self._action_to_direction):
-                print(f"No valid move. Trying next action: {action}")
 
         reward += self.check_and_award_completion_bonus()
-
         terminated = self._check_coverage_completion() or self.current_step >= self.max_steps
         observation = self._get_obs(agent)
         self._update_agent_selection()
@@ -156,21 +149,20 @@ class CoverageEnvironment(AECEnv):
         if self.render_mode == "human":
             self.render()
 
-        print(f"Step {self.current_step} End - Agent: {agent}, Total Reward: {reward}, Terminated: {terminated}")
-
-        return observation, reward, terminated, self.current_step >= self.max_steps, {'step_count': self.current_step}
-
+        info = {'step_count': self.current_step}
+        return observation, reward, terminated, self.current_step >= self.max_steps, info
 
 
-    def calculate_discovery_reward(self):
-        total_cells = self.size * self.size
-        covered_cells = np.sum(self.coverage_grid > 0)
-        coverage_percentage = (covered_cells / total_cells) * 100
-
-        # Increasing reward as more of the grid is covered
-        # This could be a simple linear increase or more complex based on your needs
-        reward_increment = (coverage_percentage / 100) * 0.5  # Example increment factor
-        return 1 + reward_increment  # Base reward is 1, increased by the increment
+    
+    def calculate_discovery_reward(self, visits, total_visits):
+        coverage_ratio = total_visits / (self.size * self.size)
+        if visits == 0:
+            # Encourage discovery
+            return 1 + 0.5 * coverage_ratio
+        else:
+            # Apply penalties more severely as more of the grid is covered
+            penalty = -0.1 * visits * (1 + 2 * coverage_ratio)
+            return max(penalty, -5)  # Ensure the penalty does not go below -5
 
     def check_and_award_completion_bonus(self):
         total_cells = self.size * self.size
@@ -194,7 +186,7 @@ class CoverageEnvironment(AECEnv):
         coverage_percentage = (covered_cells / total_cells) * 100
 
         # Check if the coverage is at least 99%
-        return coverage_percentage >= 99
+        return coverage_percentage == 100
 
     def _is_location_valid(self, agent, location):
 
