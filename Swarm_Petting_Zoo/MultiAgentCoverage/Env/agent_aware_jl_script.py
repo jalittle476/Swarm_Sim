@@ -16,23 +16,9 @@ num_episodes = 50  # Number of episodes to run
 rewards_per_episode = []
 
 epsilon_start = 1.0
-epsilon_end = 0.1
+epsilon_end = 0.3
 epsilon_decay = 0.999
 epsilon = epsilon_start
-
-# def get_state(observation):
-#     # Extract the agent's grid position
-#     agent_pos = observation['agent_location']
-#     local_map = observation['local_map']
-
-#     # Convert local map to a binary format: 0 for unexplored, 1 for explored
-#     # Assuming '0' indicates unexplored and '1' indicates explored in your local_map setup
-#     explored_tiles_binary = (local_map > 0).astype(int).flatten()
-
-#     # Combine the agent's position and the binary state of the local map into one tuple
-#     state_features = (agent_pos[0], agent_pos[1]) + tuple(explored_tiles_binary)
-
-#     return state_features
 
 def get_state(observation):
     # Extract the agent's grid position
@@ -48,6 +34,40 @@ def get_state(observation):
 
     return state_features
 
+# def get_state(observation):
+#     # Extract the agent's grid position
+#     agent_pos = observation['agent_location']
+#     local_map = observation['local_map']
+#     other_agents_positions = observation['other_agents_positions']
+#     other_agents_states = observation['other_agents_states']  # New field
+
+#     # Convert local map and other agents positions to a binary format
+#     explored_tiles_binary = tuple((local_map > 0).astype(int).flatten().tolist())  # Convert to list before converting to tuple
+#     other_agents_positions_binary = tuple([1 if np.any(pos) else 0 for pos in other_agents_positions.values()])  # Convert to tuple
+
+#     # Convert other_agents_states to a tuple of tuples
+#     other_agents_states_tuple = tuple((k, tuple(v)) for k, v in other_agents_states.items())  # Convert to tuple of tuples
+
+#     # Combine the agent's position, the binary state of the local map, the binary state of other agents positions, and the states of other agents into one tuple
+#     state_features = (agent_pos[0], agent_pos[1]) + explored_tiles_binary + other_agents_positions_binary + other_agents_states_tuple
+
+    return state_features
+
+# def choose_action(agent, state):
+#     global epsilon
+#     # Ensure the current state is in the Q-table for this agent
+#     if state not in q_table[agent]:
+#         q_table[agent][state] = np.zeros(num_actions)
+    
+#     # Epsilon-greedy policy for action selection
+#     if np.random.rand() < epsilon:
+#         action = np.random.randint(num_actions)
+#     else:
+#         action = np.argmax(q_table[agent][state])
+    
+#     epsilon = max(epsilon * epsilon_decay, epsilon_end)  # Decaying epsilon
+#     return action
+
 def choose_action(agent, state):
     global epsilon
     # Ensure the current state is in the Q-table for this agent
@@ -60,8 +80,11 @@ def choose_action(agent, state):
     else:
         action = np.argmax(q_table[agent][state])
     
+    # Get the Q-value for the chosen action
+    q_value = q_table[agent][state][action]
+
     epsilon = max(epsilon * epsilon_decay, epsilon_end)  # Decaying epsilon
-    return action
+    return action, q_value
 
 def update_q_table(agent, state, action, reward, next_state):
     # Initialize next state in Q-table for this agent if it doesn't exist
@@ -74,38 +97,40 @@ def update_q_table(agent, state, action, reward, next_state):
     td_error = td_target - q_table[agent][state][action]
     q_table[agent][state][action] += alpha * td_error
 
+
 def run_environment(env):
-    # try:
-        total_reward = 0
-        observations = env.reset()
-        done = False
-        episode = 0
+    total_reward = 0
+    observations = env.reset()
+    done = False
 
-        while not done:
-            if env.render_mode == 'human':
-                env.render()
+    while not done:
+        if env.render_mode == 'human':
+            env.render()
 
-            actions = {agent: choose_action(agent, get_state(observations[agent])) for agent in env.agents}
+        actions = {}
+        for agent in env.agents:
+            state = get_state(observations[agent])
+            action, q_value = choose_action(agent, state)  # Get the chosen action and Q-value
+            actions[agent] = action
+            observations[agent]['action'] = action  # Add action to the observation
+            observations[agent]['q_value'] = q_value  # Add Q-value to the observation
 
-            next_observations, rewards, terminated, truncation, info = env.step(actions)
+        next_observations, rewards, terminated, truncation, info = env.step(actions)
 
-            for agent in env.agents:
-                current_state = get_state(observations[agent])
-                action = actions[agent]
-                reward = rewards[agent]
-                next_state = get_state(next_observations[agent])
-                update_q_table(agent, current_state, action, reward, next_state)
-                observations[agent] = next_observations[agent]
+        for agent in env.agents:
+            current_state = get_state(observations[agent])
+            action = actions[agent]
+            reward = rewards[agent]
+            next_state = get_state(next_observations[agent])
+            update_q_table(agent, current_state, action, reward, next_state)  # Update Q-table
+            observations[agent] = next_observations[agent]
 
-            total_reward += sum(rewards.values())
-            done = np.any(terminated) or np.any(truncation)  # Use np.any() to evaluate arrays in a boolean context
+        total_reward += sum(rewards.values())
+        done = np.any(terminated) or np.any(truncation)  # Use np.any() to evaluate arrays in a boolean context
 
-            if done:
-                break
-        episode = episode + 1                
-        return total_reward
-    # except Exception as e:
-    #     print(f"An error occurred: {e}")
+        if done:
+            break
+    return total_reward
 
 # Run the environment
 for episode in range(num_episodes):

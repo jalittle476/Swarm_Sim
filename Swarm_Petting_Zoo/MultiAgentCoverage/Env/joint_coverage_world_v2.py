@@ -24,7 +24,7 @@ class CoverageEnvironment(AECEnv):
         self.frame_count = 0
         self.max_steps = max_steps  # Maximum steps per episode
         self.current_step = 0  # Current step counter
-        self.penalty_cap = -10  # Maximum penalty for revisits
+        self.penalty_cap = -2  # Maximum penalty for revisits
         
         pygame.init()
         self.window = None
@@ -121,7 +121,7 @@ class CoverageEnvironment(AECEnv):
             action = actions[agent]
             total_visits = np.sum(self.coverage_grid > 0)
             movement_success_probability = 0.9  # Probability of successful movement
-            sensor_success_probability = 0.8  # Probability of successful sensor mapping
+            sensor_success_probability = 0.1  # Probability of successful sensor mapping
 
             direction = self._action_to_direction[action]
             new_location = np.clip(self._agent_locations[agent] + direction, 0, self.size - 1)
@@ -130,7 +130,6 @@ class CoverageEnvironment(AECEnv):
             if np.random.rand() < movement_success_probability:
                 # Move as intended
                 self._agent_locations[agent] = new_location
-                self.coverage_grid[new_location[0], new_location[1]] += 1
 
             visits = self.coverage_grid[new_location[0], new_location[1]]
 
@@ -165,10 +164,10 @@ class CoverageEnvironment(AECEnv):
         coverage_ratio = total_visits / (self.size * self.size)
         if visits == 0:
             # Encourage discovery
-            return 1 + 0.5 * coverage_ratio
+            return 2 + 0.5 * coverage_ratio
         else:
             # Apply penalties more severely as more of the grid is covered
-            penalty = -0.1 * visits * (1 + 2 * coverage_ratio)
+            penalty = -0.005 * visits * (1 + 2 * coverage_ratio)
             return max(penalty, self.penalty_cap)  # Ensure the penalty does not go below -5
 
     def check_and_award_completion_bonus(self):
@@ -297,7 +296,7 @@ class CoverageEnvironment(AECEnv):
         """
         Generate the observation for a given agent, including the agent's location,
         a local map centered around the agent's current position, and the relative
-        positions of other agents within the agent's field of view.
+        positions and states of other agents within the agent's field of view.
         """
         # Use consistent variable access for agent locations
         agent_location = self._agent_locations[agent]
@@ -306,10 +305,23 @@ class CoverageEnvironment(AECEnv):
         # Get the relative positions of other agents within the FOV
         other_agents_positions = self._get_other_agents_positions(agent, agent_location)
 
+
         return {
             "agent_location": agent_location,  # Current location of the agent
             "local_map": local_map,  # Local view of the grid around the agent
-            "other_agents_positions": other_agents_positions  # Relative positions of other agents within the FOV
+            "other_agents_positions": other_agents_positions,  # Relative positions of other agents within the FOV
+        }
+
+    def _get_agent_state(self, agent):
+        """
+        Get the state of a given agent. This can be defined as needed based on the specific requirements of your environment.
+        For example, it could include the agent's location, the local map around the agent, etc.
+        """
+        agent_location = self._agent_locations[agent]
+        local_map = self._extract_local_map(agent_location)
+        return {
+            "agent_location": agent_location,
+            "local_map": local_map
         }
 
     def _extract_local_map(self, center):
@@ -344,7 +356,7 @@ class CoverageEnvironment(AECEnv):
 
         for other_agent, other_agent_location in self._agent_locations.items():
             if other_agent != observing_agent and self._is_within_fov(observing_agent, other_agent):
-                relative_position = other_agent_location - observing_agent_location
+                relative_position = tuple(a - b for a, b in zip(other_agent_location, observing_agent_location))
                 other_agents_positions[other_agent] = relative_position
 
         return other_agents_positions
