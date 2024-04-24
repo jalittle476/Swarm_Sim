@@ -149,6 +149,10 @@ class CoverageEnvironment(AECEnv):
         else:
             immediate_reward = -0.1  # Sensor failure penalty
 
+         # Add noise to the reward
+        noise = np.random.normal(0, 0.1)  # Gaussian noise with mean 0 and standard deviation 0.1
+        immediate_reward += noise
+
         # Add immediate reward to the existing value in the reward grid
         self.reward_grid[new_location[0], new_location[1]] += immediate_reward
         reward += immediate_reward
