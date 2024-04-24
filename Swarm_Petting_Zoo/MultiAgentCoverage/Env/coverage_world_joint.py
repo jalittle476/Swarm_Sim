@@ -111,77 +111,47 @@ class CoverageEnvironment(AECEnv):
                     locations[agent] = location
                     break
         return locations
-
-    # def step(self, action):
-    #     self.current_step += 1
-    #     agent = self.agent_selection
-    #     moved = False
-    #     tried_actions = set()
-    #     reward = 0
-    #     total_visits = np.sum(self.coverage_grid > 0)
-
-    #     while not moved and len(self._action_to_direction) > len(tried_actions):
-    #         direction = self._action_to_direction[action]
-    #         new_location = np.clip(self._agent_locations[agent] + direction, 0, self.size - 1)
-
-    #         if self._is_location_valid(agent, new_location):
-    #             visits = self.coverage_grid[new_location[0], new_location[1]]
-    #             self._agent_locations[agent] = new_location
-    #             moved = True
-    #             current_reward = self.calculate_discovery_reward(visits, total_visits)
-    #             updated_reward = self.reward_grid[new_location[0], new_location[1]] + current_reward
-
-    #             # Apply cap when updating the grid
-    #             print(f"Before update: {self.reward_grid[new_location[0], new_location[1]]}")
-    #             self.reward_grid[new_location[0], new_location[1]] = max(updated_reward, -5)
-    #             print(f"After update: {self.reward_grid[new_location[0], new_location[1]]}, Current Reward: {current_reward}")
-    #             self.coverage_grid[new_location[0], new_location[1]] += 1
-    #             reward += current_reward
-
-    #         tried_actions.add(action)
-    #         action = (action + 1) % len(self._action_to_direction)
-
-    #     reward += self.check_and_award_completion_bonus()
-    #     terminated = self._check_coverage_completion() or self.current_step >= self.max_steps
-    #     observation = self._get_obs(agent)
-    #     self._update_agent_selection()
-
-    #     if self.render_mode == "human":
-    #         self.render()
-
-    #     info = {'step_count': self.current_step}
-    #     return observation, reward, terminated, self.current_step >= self.max_steps, info
     
     def step(self, action):
         self.current_step += 1
         agent = self.agent_selection
         moved = False
-        tried_actions = set()
         reward = 0
         total_visits = np.sum(self.coverage_grid > 0)
+        movement_success_probability = 0.9  # Probability of successful movement
+        sensor_success_probability = 0.8  # Probability of successful sensor mapping
 
-        #print(f"Step {self.current_step} Start - Agent: {agent}, Initial Action: {action}")
+        direction = self._action_to_direction[action]
+        intended_location = np.clip(self._agent_locations[agent] + direction, 0, self.size - 1)
 
-        while not moved and len(self._action_to_direction) > len(tried_actions):
-            direction = self._action_to_direction[action]
-            new_location = np.clip(self._agent_locations[agent] + direction, 0, self.size - 1)
+        # Determine the actual movement
+        if np.random.rand() < movement_success_probability:
+            # Move as intended
+            new_location = intended_location
+        else:
+            # Move randomly to any valid direction
+            directions = list(self._action_to_direction.values())
+            np.random.shuffle(directions)  # Randomize direction order
+            new_location = self._agent_locations[agent]  # Default to current location if no valid move found
+            for direction in directions:
+                random_location = np.clip(self._agent_locations[agent] + direction, 0, self.size - 1)
+                if self._is_location_valid(agent, random_location) and not np.array_equal(random_location, self._agent_locations[agent]):
+                    new_location = random_location
+                    break
 
-            if self._is_location_valid(agent, new_location):
-                visits = self.coverage_grid[new_location[0], new_location[1]]
-                self._agent_locations[agent] = new_location
-                moved = True
-                current_reward = self.calculate_discovery_reward(visits, total_visits)
-                #new_cumulative_reward = self.reward_grid[new_location[0], new_location[1]] + current_reward
-                self.reward_grid[new_location[0], new_location[1]] = current_reward
-                self.coverage_grid[new_location[0], new_location[1]] += 1
-                reward += current_reward
+        self._agent_locations[agent] = new_location
+        visits = self.coverage_grid[new_location[0], new_location[1]]
 
-                #print(f"Action: {action}, New Location: {new_location}, Visits: {visits + 1}, Immediate Reward: {current_reward}")
+        # Sensor mapping success
+        if np.random.rand() < sensor_success_probability:
+            self.coverage_grid[new_location[0], new_location[1]] += 1
+            immediate_reward = self.calculate_discovery_reward(visits, total_visits)
+        else:
+            immediate_reward = -0.1  # Sensor failure penalty
 
-            tried_actions.add(action)
-            action = (action + 1) % len(self._action_to_direction)
-            #if not moved and len(tried_actions) < len(self._action_to_direction):
-                #print(f"No valid move. Trying next action: {action}")
+        # Add immediate reward to the existing value in the reward grid
+        self.reward_grid[new_location[0], new_location[1]] += immediate_reward
+        reward += immediate_reward
 
         reward += self.check_and_award_completion_bonus()
         terminated = self._check_coverage_completion() or self.current_step >= self.max_steps
@@ -192,11 +162,23 @@ class CoverageEnvironment(AECEnv):
             self.render()
 
         info = {'step_count': self.current_step}
-        #print(f"Step {self.current_step} End - Agent: {agent}, Total Step Reward: {reward}, Terminated: {terminated}")
-
         return observation, reward, terminated, self.current_step >= self.max_steps, info
 
-    
+    def calculate_mapping_reward(self, success, visits, total_visits):
+        coverage_ratio = total_visits / (self.size * self.size)
+        if success:
+            # If mapping is successful, calculate discovery reward
+            if visits == 0:
+                # Higher reward for discovering a new cell
+                return 1 + 0.5 * coverage_ratio
+            else:
+                # Lower or negative reward for revisiting a cell
+                penalty = -0.1 * visits * (1 + 2 * coverage_ratio)
+                return max(penalty, self.penalty_cap)
+        else:
+            # Apply an additional penalty for sensor failure
+            return -0.2  # This penalty is added directly in the reward calculation
+
     def calculate_discovery_reward(self, visits, total_visits):
         coverage_ratio = total_visits / (self.size * self.size)
         if visits == 0:
@@ -213,7 +195,7 @@ class CoverageEnvironment(AECEnv):
         coverage_percentage = (covered_cells / total_cells) * 100
 
         # Define coverage thresholds and corresponding rewards
-        thresholds = {90: 50, 95: 75, 99: 100}  # Example thresholds and their bonuses
+        thresholds = {75: 750, 85: 850, 95: 950, 100: 1000}  # Example thresholds and their bonuses
         for threshold, bonus in thresholds.items():
             if coverage_percentage >= threshold and not self.awarded_thresholds.get(threshold, False):
                 self.awarded_thresholds[threshold] = True
@@ -269,49 +251,6 @@ class CoverageEnvironment(AECEnv):
 
         # If all agents are terminated, you can handle it as you see fit (e.g., set agent_selection to None)
         self.agent_selection = None
-    
-    # def render(self):
-    #     if self.render_mode != "human":
-    #         return
-
-    #     if self.window is None:
-    #         self.window = pygame.display.set_mode((self.window_size, self.window_size))
-    #     if self.clock is None:
-    #         self.clock = pygame.time.Clock()
-
-    #     canvas = pygame.Surface((self.window_size, self.window_size))
-    #     canvas.fill((255, 255, 255))  # Background color
-    #     pix_square_size = self.window_size / self.size
-    #     font = pygame.font.Font(None, int(pix_square_size / 3))  # Font size based on cell size
-
-    #     max_visits = np.max(self.coverage_grid)
-    #     for x in range(self.size):
-    #         for y in range(self.size):
-    #             visits = self.coverage_grid[x, y]
-    #             if visits > 0:  # Only color cells that have been visited
-    #                 if max_visits > 0:
-    #                     color_intensity = 255 - int(255 * (visits / max_visits))
-    #                 else:
-    #                     color_intensity = 255  # Default light green if max_visits is 0
-    #                 cell_color = (0, color_intensity, 0)
-    #                 pygame.draw.rect(canvas, cell_color, 
-    #                                 pygame.Rect(x * pix_square_size, y * pix_square_size, pix_square_size, pix_square_size))
-
-    #                 # Displaying the value
-    #                 text_surface = font.render(f"{self.reward_grid[x, y]:.2f}", True, (255, 255, 255))
-    #                 text_rect = text_surface.get_rect(center=(x * pix_square_size + pix_square_size / 2,
-    #                                                         y * pix_square_size + pix_square_size / 2))
-    #                 canvas.blit(text_surface, text_rect)
-
-    #       # Draw agents after cells to ensure they are visible on top
-    #     for agent, location in self._agent_locations.items():
-    #         pygame.draw.circle(canvas, (255, 0, 0),  # Using red color for better visibility
-    #                         (int((location[0] + 0.5) * pix_square_size), int((location[1] + 0.5) * pix_square_size)),
-    #                         int(pix_square_size / 4))  # Adjust size as needed
-
-    #     self.window.blit(canvas, canvas.get_rect())
-    #     pygame.display.update()
-    #     self.clock.tick(self.metadata["render_fps"])
 
     def render(self):
         if self.render_mode != "human":

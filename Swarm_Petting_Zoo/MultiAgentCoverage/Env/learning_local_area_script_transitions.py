@@ -1,6 +1,6 @@
 import numpy as np
 import pygame
-from coverage_world import CoverageEnvironment
+from coverage_world_transitions import CoverageEnvironment
 import matplotlib.pyplot as plt
 
 # Initialize the environment
@@ -10,7 +10,7 @@ env = CoverageEnvironment(num_agents=2, max_steps=1000, render_mode='human', siz
 num_states = env.size * env.size
 num_actions = env.action_space.n
 q_tables = {agent: {} for agent in env.possible_agents}
-alpha = 0.3
+alpha = 0.1
 gamma = 0.99
 num_episodes = 50  # Number of episodes to run
 rewards_per_episode = []

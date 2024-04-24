@@ -1,6 +1,6 @@
 import numpy as np
 import pygame
-from coverage_world import CoverageEnvironment
+from coverage_world_transitions import CoverageEnvironment
 import matplotlib.pyplot as plt
 
 # Initialize the environment
@@ -9,8 +9,8 @@ env = CoverageEnvironment(num_agents=2, max_steps=1000, render_mode='human', siz
 # Q-Learning setup
 num_states = env.size * env.size
 num_actions = env.action_space.n
-q_tables = {agent: {} for agent in env.possible_agents}
-alpha = 0.3
+q_table = {}  # Single shared Q-table
+alpha = 0.1
 gamma = 0.99
 num_episodes = 50  # Number of episodes to run
 rewards_per_episode = []
@@ -37,31 +37,31 @@ def get_state(observation):
 
     return state
 
-def choose_action(agent, state):
+def choose_action(state):
     global epsilon
     # Ensure the current state is in the Q-table
-    if state not in q_tables[agent]:
-        q_tables[agent][state] = np.zeros(num_actions)
+    if state not in q_table:
+        q_table[state] = np.zeros(num_actions)
     
     # Epsilon-greedy policy for action selection
     if np.random.rand() < epsilon:
         action = np.random.randint(num_actions)
     else:
-        action = np.argmax(q_tables[agent][state])
+        action = np.argmax(q_table[state])
     
     epsilon = max(epsilon * epsilon_decay, epsilon_end)  # Decaying epsilon
     return action
 
-def update_q_table(agent, state, action, reward, next_state):
+def update_q_table(state, action, reward, next_state):
     # Initialize next state in Q-table if it doesn't exist
-    if next_state not in q_tables[agent]:
-        q_tables[agent][next_state] = np.zeros(num_actions)
+    if next_state not in q_table:
+        q_table[next_state] = np.zeros(num_actions)
     
     # Q-Learning update formula
-    best_next_action = np.argmax(q_tables[agent][next_state])
-    td_target = reward + gamma * q_tables[agent][next_state][best_next_action]
-    td_error = td_target - q_tables[agent][state][action]
-    q_tables[agent][state][action] += alpha * td_error
+    best_next_action = np.argmax(q_table[next_state])
+    td_target = reward + gamma * q_table[next_state][best_next_action]
+    td_error = td_target - q_table[state][action]
+    q_table[state][action] += alpha * td_error
 
 def run_environment(env):
     total_reward = 0
@@ -74,11 +74,11 @@ def run_environment(env):
 
         for agent in env.agent_iter():
             current_state = get_state(observations[agent])
-            action = choose_action(agent, current_state)
+            action = choose_action(current_state)
             next_observation, reward, terminated, truncation, info = env.step(action)
             next_state = get_state(next_observation)
 
-            update_q_table(agent, current_state, action, reward, next_state)
+            update_q_table(current_state, action, reward, next_state)
             observations[agent] = next_observation
 
             total_reward += reward
