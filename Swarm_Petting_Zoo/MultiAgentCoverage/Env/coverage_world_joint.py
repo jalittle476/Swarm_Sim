@@ -113,45 +113,25 @@ class CoverageEnvironment(AECEnv):
         return locations
     
     def step(self, actions):
-        # print("In step function...")  # Debug print
         self.current_step += 1
-        # print(f"Current step: {self.current_step}")  # Debug print
-
         rewards = {agent: 0 for agent in self.agents}
         terminated = False
 
         for agent in self.agents:
             action = actions[agent]
-            # print(f"Agent {agent} chose action {action}")  # Debug print
-
-            
-            moved = False
             total_visits = np.sum(self.coverage_grid > 0)
             movement_success_probability = 0.9  # Probability of successful movement
             sensor_success_probability = 0.8  # Probability of successful sensor mapping
 
             direction = self._action_to_direction[action]
-            intended_location = np.clip(self._agent_locations[agent] + direction, 0, self.size - 1)
-
-
-            # print(f"Agent {agent} intended to move from {self._agent_locations[agent]} to {intended_location}")  # Debug print
+            new_location = np.clip(self._agent_locations[agent] + direction, 0, self.size - 1)
 
             # Determine the actual movement
             if np.random.rand() < movement_success_probability:
                 # Move as intended
-                new_location = intended_location
-            else:
-                # Move randomly to any valid direction
-                directions = list(self._action_to_direction.values())
-                np.random.shuffle(directions)  # Randomize direction order
-                new_location = self._agent_locations[agent]  # Default to current location if no valid move found
-                for direction in directions:
-                    random_location = np.clip(self._agent_locations[agent] + direction, 0, self.size - 1)
-                    if self._is_location_valid(agent, random_location) and not np.array_equal(random_location, self._agent_locations[agent]):
-                        new_location = random_location
-                        break
+                self._agent_locations[agent] = new_location
+                self.coverage_grid[new_location[0], new_location[1]] += 1
 
-            self._agent_locations[agent] = new_location
             visits = self.coverage_grid[new_location[0], new_location[1]]
 
             # Sensor mapping success
@@ -172,30 +152,14 @@ class CoverageEnvironment(AECEnv):
             rewards[agent] += self.check_and_award_completion_bonus()
             terminated = self._check_coverage_completion() or self.current_step >= self.max_steps
 
-            
-            observations = {agent: self._get_obs(agent) for agent in self.agents}
-            self._update_agent_selection()
+        observations = {agent: self._get_obs(agent) for agent in self.agents}
+        self._update_agent_selection()
 
-            if self.render_mode == "human":
-                self.render()
+        if self.render_mode == "human":
+            self.render()
 
         info = {'step_count': self.current_step}
         return observations, rewards, terminated, self.current_step >= self.max_steps, info
-
-    def calculate_mapping_reward(self, success, visits, total_visits):
-        coverage_ratio = total_visits / (self.size * self.size)
-        if success:
-            # If mapping is successful, calculate discovery reward
-            if visits == 0:
-                # Higher reward for discovering a new cell
-                return 1 + 0.5 * coverage_ratio
-            else:
-                # Lower or negative reward for revisiting a cell
-                penalty = -0.1 * visits * (1 + 2 * coverage_ratio)
-                return max(penalty, self.penalty_cap)
-        else:
-            # Apply an additional penalty for sensor failure
-            return -0.2  # This penalty is added directly in the reward calculation
 
     def calculate_discovery_reward(self, visits, total_visits):
         coverage_ratio = total_visits / (self.size * self.size)

@@ -4,7 +4,7 @@ from coverage_world_joint import CoverageEnvironment
 import matplotlib.pyplot as plt
 
 # Initialize the environment
-env = CoverageEnvironment(num_agents=5, max_steps=100, render_mode='human', size=10, seed=123)
+env = CoverageEnvironment(num_agents=2, max_steps=1000, render_mode='human', size=10, seed=123)
 
 # Q-Learning setup
 num_states = env.size * env.size
@@ -16,7 +16,7 @@ num_episodes = 50  # Number of episodes to run
 rewards_per_episode = []
 
 epsilon_start = 1.0
-epsilon_end = 0.3
+epsilon_end = 0.1
 epsilon_decay = 0.999
 epsilon = epsilon_start
 
@@ -61,29 +61,27 @@ def update_q_table(agent, state, action, reward, next_state):
     q_table[agent][state][action] += alpha * td_error
 
 def run_environment(env):
-    # print("Running environment...")  # Debug print
     total_reward = 0
     observations = env.reset()
     done = False
     episode = 0
 
     while not done:
-        # print("Starting loop...")  # Debug print
         if env.render_mode == 'human':
             env.render()
 
         actions = {agent: choose_action(agent, get_state(observations[agent])) for agent in env.agents}
-        # print(f"Calling step function with actions {actions}")  # Debug print
+
         next_observations, rewards, terminated, truncation, info = env.step(actions)
 
         for agent in env.agents:
-            # print(f"Agent {agent} turn")  # Debug print
             current_state = get_state(observations[agent])
             action = actions[agent]
             reward = rewards[agent]
             next_state = get_state(next_observations[agent])
             update_q_table(agent, current_state, action, reward, next_state)
             observations[agent] = next_observations[agent]
+
 
             total_reward += sum(rewards.values())
             done = terminated or truncation
