@@ -5,6 +5,8 @@ from gym import spaces
 import numpy as np
 import pygame
 
+#Made to include other agents positions in the observation space
+
 class CoverageEnvironment(AECEnv):
     metadata = {"name": "coverage_environment_v0", "render_fps": 1000}
 
@@ -277,18 +279,37 @@ class CoverageEnvironment(AECEnv):
         self.clock.tick(self.metadata["render_fps"])
 
         
+    # def _get_obs(self, agent):
+    #     """
+    #     Generate the observation for a given agent, including the agent's location
+    #     and a local map centered around the agent's current position.
+    #     """
+    #     # Use consistent variable access for agent locations
+    #     agent_location = self._agent_locations[agent]
+    #     local_map = self._extract_local_map(agent_location)
+
+    #     return {
+    #         "agent_location": agent_location,  # Current location of the agent
+    #         "local_map": local_map  # Local view of the grid around the agent
+    #     }
+    
     def _get_obs(self, agent):
         """
-        Generate the observation for a given agent, including the agent's location
-        and a local map centered around the agent's current position.
+        Generate the observation for a given agent, including the agent's location,
+        a local map centered around the agent's current position, and the relative
+        positions of other agents within the agent's field of view.
         """
         # Use consistent variable access for agent locations
         agent_location = self._agent_locations[agent]
         local_map = self._extract_local_map(agent_location)
 
+        # Get the relative positions of other agents within the FOV
+        other_agents_positions = self._get_other_agents_positions(agent, agent_location)
+
         return {
             "agent_location": agent_location,  # Current location of the agent
-            "local_map": local_map  # Local view of the grid around the agent
+            "local_map": local_map,  # Local view of the grid around the agent
+            "other_agents_positions": other_agents_positions  # Relative positions of other agents within the FOV
         }
 
     def _extract_local_map(self, center):
@@ -317,6 +338,16 @@ class CoverageEnvironment(AECEnv):
         local_map[start_idx[0]:end_idx[0], start_idx[1]:end_idx[1]] = grid_section
 
         return local_map
+    
+    def _get_other_agents_positions(self, observing_agent, observing_agent_location):
+        other_agents_positions = {}
+
+        for other_agent, other_agent_location in self._agent_locations.items():
+            if other_agent != observing_agent and self._is_within_fov(observing_agent, other_agent):
+                relative_position = other_agent_location - observing_agent_location
+                other_agents_positions[other_agent] = relative_position
+
+        return other_agents_positions
 
 
     def observe(self, agent):

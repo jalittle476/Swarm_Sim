@@ -64,7 +64,6 @@ def run_environment(env):
     total_reward = 0
     observations = env.reset()
     done = False
-    episode = 0
 
     while not done:
         if env.render_mode == 'human':

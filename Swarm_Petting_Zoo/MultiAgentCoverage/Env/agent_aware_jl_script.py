@@ -1,6 +1,6 @@
 import numpy as np
 import pygame
-from coverage_world_joint import CoverageEnvironment
+from joint_coverage_world_v2 import CoverageEnvironment
 import matplotlib.pyplot as plt
 
 # Initialize the environment
@@ -20,17 +20,31 @@ epsilon_end = 0.1
 epsilon_decay = 0.999
 epsilon = epsilon_start
 
+# def get_state(observation):
+#     # Extract the agent's grid position
+#     agent_pos = observation['agent_location']
+#     local_map = observation['local_map']
+
+#     # Convert local map to a binary format: 0 for unexplored, 1 for explored
+#     # Assuming '0' indicates unexplored and '1' indicates explored in your local_map setup
+#     explored_tiles_binary = (local_map > 0).astype(int).flatten()
+
+#     # Combine the agent's position and the binary state of the local map into one tuple
+#     state_features = (agent_pos[0], agent_pos[1]) + tuple(explored_tiles_binary)
+
+#     return state_features
+
 def get_state(observation):
     # Extract the agent's grid position
     agent_pos = observation['agent_location']
     local_map = observation['local_map']
+    other_agents_positions = observation['other_agents_positions']
 
-    # Convert local map to a binary format: 0 for unexplored, 1 for explored
-    # Assuming '0' indicates unexplored and '1' indicates explored in your local_map setup
+    # Convert local map and other agents positions to a binary format
     explored_tiles_binary = (local_map > 0).astype(int).flatten()
-
-    # Combine the agent's position and the binary state of the local map into one tuple
-    state_features = (agent_pos[0], agent_pos[1]) + tuple(explored_tiles_binary)
+    other_agents_positions_binary = [1 if np.any(pos) else 0 for pos in other_agents_positions.values()]
+    # Combine the agent's position, the binary state of the local map, and the binary state of other agents positions into one tuple
+    state_features = (agent_pos[0], agent_pos[1]) + tuple(explored_tiles_binary) + tuple(other_agents_positions_binary)
 
     return state_features
 
@@ -61,7 +75,7 @@ def update_q_table(agent, state, action, reward, next_state):
     q_table[agent][state][action] += alpha * td_error
 
 def run_environment(env):
-    try:
+    # try:
         total_reward = 0
         observations = env.reset()
         done = False
@@ -83,15 +97,15 @@ def run_environment(env):
                 update_q_table(agent, current_state, action, reward, next_state)
                 observations[agent] = next_observations[agent]
 
-                total_reward += sum(rewards.values())
-                done = terminated or truncation
+            total_reward += sum(rewards.values())
+            done = np.any(terminated) or np.any(truncation)  # Use np.any() to evaluate arrays in a boolean context
 
-                if done:
-                    break
+            if done:
+                break
         episode = episode + 1                
         return total_reward
-    except Exception as e:
-        print(f"An error occurred: {e}")
+    # except Exception as e:
+    #     print(f"An error occurred: {e}")
 
 # Run the environment
 for episode in range(num_episodes):
@@ -99,7 +113,7 @@ for episode in range(num_episodes):
     rewards_per_episode.append(total_reward)
     print(f"Episode {episode + 1}: Total Reward = {total_reward}")
 
-pygame.quit()  # Properly close Pygame
+env.close()
 
 # Plotting
 plt.figure(figsize=(10, 5))
