@@ -61,35 +61,37 @@ def update_q_table(agent, state, action, reward, next_state):
     q_table[agent][state][action] += alpha * td_error
 
 def run_environment(env):
-    total_reward = 0
-    observations = env.reset()
-    done = False
-    episode = 0
+    try:
+        total_reward = 0
+        observations = env.reset()
+        done = False
+        episode = 0
 
-    while not done:
-        if env.render_mode == 'human':
-            env.render()
+        while not done:
+            if env.render_mode == 'human':
+                env.render()
 
-        actions = {agent: choose_action(agent, get_state(observations[agent])) for agent in env.agents}
+            actions = {agent: choose_action(agent, get_state(observations[agent])) for agent in env.agents}
 
-        next_observations, rewards, terminated, truncation, info = env.step(actions)
+            next_observations, rewards, terminated, truncation, info = env.step(actions)
 
-        for agent in env.agents:
-            current_state = get_state(observations[agent])
-            action = actions[agent]
-            reward = rewards[agent]
-            next_state = get_state(next_observations[agent])
-            update_q_table(agent, current_state, action, reward, next_state)
-            observations[agent] = next_observations[agent]
+            for agent in env.agents:
+                current_state = get_state(observations[agent])
+                action = actions[agent]
+                reward = rewards[agent]
+                next_state = get_state(next_observations[agent])
+                update_q_table(agent, current_state, action, reward, next_state)
+                observations[agent] = next_observations[agent]
 
+                total_reward += sum(rewards.values())
+                done = terminated or truncation
 
-        total_reward += sum(rewards.values())
-        done = terminated or truncation
-
-        if done:
-            break
-    episode = episode + 1                
-    return total_reward
+                if done:
+                    break
+        episode = episode + 1                
+        return total_reward
+    except Exception as e:
+        print(f"An error occurred: {e}")
 
 # Run the environment
 for episode in range(num_episodes):
@@ -97,7 +99,7 @@ for episode in range(num_episodes):
     rewards_per_episode.append(total_reward)
     print(f"Episode {episode + 1}: Total Reward = {total_reward}")
 
-env.close()
+pygame.quit()  # Properly close Pygame
 
 # Plotting
 plt.figure(figsize=(10, 5))

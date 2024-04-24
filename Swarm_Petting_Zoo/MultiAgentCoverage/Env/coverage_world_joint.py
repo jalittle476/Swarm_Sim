@@ -243,6 +243,11 @@ class CoverageEnvironment(AECEnv):
         if self.clock is None:
             self.clock = pygame.time.Clock()
 
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+
         canvas = pygame.Surface((self.window_size, self.window_size))
         canvas.fill((255, 255, 255))  # Background color
         pix_square_size = self.window_size / self.size
@@ -328,3 +333,9 @@ class CoverageEnvironment(AECEnv):
 
     def get_agent_location(self, agent):
         return self._agent_locations[agent]
+
+    def close(self):
+        if self.window is not None:
+            pygame.quit()
+            self.window = None
+            self.clock = None

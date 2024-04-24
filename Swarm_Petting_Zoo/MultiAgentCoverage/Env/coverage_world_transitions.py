@@ -307,6 +307,11 @@ class CoverageEnvironment(AECEnv):
             self.window = pygame.display.set_mode((self.window_size, self.window_size))
         if self.clock is None:
             self.clock = pygame.time.Clock()
+            
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
 
         canvas = pygame.Surface((self.window_size, self.window_size))
         canvas.fill((255, 255, 255))  # Background color
