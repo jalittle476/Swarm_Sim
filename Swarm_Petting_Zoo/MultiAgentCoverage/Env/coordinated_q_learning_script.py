@@ -4,7 +4,7 @@ from coordinated_coverage_world import CoverageEnvironment
 import matplotlib.pyplot as plt
 
 # Initialize the environment
-env = CoverageEnvironment(num_agents=2, max_steps=1000, render_mode='human', size=10, seed=123)
+env = CoverageEnvironment(num_agents=2, max_steps=1000, render_mode='', size=10, seed=123)
 
 # Q-Learning setup
 num_states = env.size * env.size
@@ -12,7 +12,7 @@ num_actions = env.action_space.n
 q_table = {agent: {} for agent in env.agents}  # Separate Q-table for each agent
 alpha = 0.1
 gamma = 0.99
-num_episodes = 50  # Number of episodes to run
+num_episodes = 100  # Number of episodes to run
 rewards_per_episode = []
 
 epsilon_start = 1.0
