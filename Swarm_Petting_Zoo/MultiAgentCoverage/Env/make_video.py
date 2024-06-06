@@ -18,7 +18,7 @@ def create_video(image_folder, video_name):
 num_episodes = 50
 
 # Create a video for the first episode
-create_video("recordings/episode_1", "coor_episode_1.mp4")
+create_video("recordings/coor_episode_1", "coor_episode_1.mp4")
 
 # Create a video for the last episode
-create_video(f"recordings/episode_{num_episodes - 1}", f"coor_episode_{num_episodes - 1}.mp4")
+create_video(f"recordings/coor_episode_{num_episodes - 1}", f"coor_episode_{num_episodes - 1}.mp4")

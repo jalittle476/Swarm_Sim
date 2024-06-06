@@ -197,7 +197,7 @@ class CoverageEnvironment(AECEnv):
         coverage_percentage = (covered_cells / total_cells) * 100
 
         # Define coverage thresholds and corresponding rewards
-        thresholds = {75: 75, 85: 85, 95: 95, 100: 100}  # Example thresholds and their bonuses
+        thresholds = {75: 750, 85: 850, 95: 950, 100: 1000}  # Example thresholds and their bonuses
         for threshold, bonus in thresholds.items():
             if coverage_percentage >= threshold and not self.awarded_thresholds.get(threshold, False):
                 self.awarded_thresholds[threshold] = True

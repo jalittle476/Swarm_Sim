@@ -64,7 +64,7 @@ def update_q_table(agent, state, action, reward, next_state):
     td_error = td_target - q_table[state][action]
     q_table[state][action] += alpha * td_error
 
-def run_environment(env, record=False, episode_num=0):
+def run_environment(env, record=False, episode_num=0, render=False):
     total_reward = 0
     observations = env.reset()
     done = False
@@ -72,7 +72,7 @@ def run_environment(env, record=False, episode_num=0):
 
     # Create a directory to store the frames
     if record:
-        os.makedirs(f'recordings/episode_{episode_num}', exist_ok=True)
+        os.makedirs(f'recordings/coop_episode_{episode_num}', exist_ok=True)
 
     while not done:
         if env.render_mode == 'human':
@@ -80,7 +80,7 @@ def run_environment(env, record=False, episode_num=0):
 
             # Save the screen surface to an image file for the first and last episode
             if record and frame_count % 10 == 0:
-                pygame.image.save(env.window, f'recordings/episode_{episode_num}/frame_{frame_count//10}.png')
+                pygame.image.save(env.window, f'recordings/coop_episode_{episode_num}/frame_{frame_count//10}.png')
             frame_count += 1
 
         actions = {}
@@ -113,7 +113,7 @@ def run_environment(env, record=False, episode_num=0):
 # Run the environment
 for episode in range(num_episodes):
     if episode == 1 or episode == num_episodes - 1:  # Record only the first and last episodes
-        total_reward = run_environment(env, record=True, episode_num=episode)
+        total_reward = run_environment(env, record=True, episode_num=episode, render=True)
     else:
         total_reward = run_environment(env)
     rewards_per_episode.append(total_reward)

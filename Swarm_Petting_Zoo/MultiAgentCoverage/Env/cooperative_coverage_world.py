@@ -197,7 +197,7 @@ class CoverageEnvironment(AECEnv):
         coverage_percentage = (covered_cells / total_cells) * 100
 
         # Define coverage thresholds and corresponding rewards
-        thresholds = {75: 75, 85: 85, 95: 95, 100: 100}  # Example thresholds and their bonuses
+        thresholds = {75: 750, 85: 850, 95: 950, 100: 1000}  # Example thresholds and their bonuses
         for threshold, bonus in thresholds.items():
             if coverage_percentage >= threshold and not self.awarded_thresholds.get(threshold, False):
                 self.awarded_thresholds[threshold] = True
@@ -298,20 +298,6 @@ class CoverageEnvironment(AECEnv):
         pygame.display.update()
         self.clock.tick(self.metadata["render_fps"])
 
-        
-    # def _get_obs(self, agent):
-    #     """
-    #     Generate the observation for a given agent, including the agent's location
-    #     and a local map centered around the agent's current position.
-    #     """
-    #     # Use consistent variable access for agent locations
-    #     agent_location = self._agent_locations[agent]
-    #     local_map = self._extract_local_map(agent_location)
-
-    #     return {
-    #         "agent_location": agent_location,  # Current location of the agent
-    #         "local_map": local_map  # Local view of the grid around the agent
-    #     }
     
     def _get_obs(self, agent):
         """

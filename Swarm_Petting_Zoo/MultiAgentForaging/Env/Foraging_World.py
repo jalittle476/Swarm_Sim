@@ -5,8 +5,7 @@ from gym import spaces
 import numpy as np
 import pygame
 
-## TODO Implement Communication Methods
-## TODO Implement Auctions and Trading
+## Foraging World Without Communication
 
 class ForagingEnvironment(AECEnv):
     metadata = {"name": "foraging_environment_v0", "render_fps": 1000}
@@ -24,7 +23,7 @@ class ForagingEnvironment(AECEnv):
         self.paused = False
         self.record_sim = record_sim
         self.frame_count = 0
-        self.initial_battery_level = 4 * size # They could explore the perimeter of the space 
+        self.full_battery_charge = 4 * size # They could explore the perimeter of the space 
         
         pygame.init()
         self.window = None
@@ -35,10 +34,6 @@ class ForagingEnvironment(AECEnv):
         self.possible_agents = [f"agent_{i}" for i in range(num_agents)]
         self.agent_selection = self.possible_agents[0]
         self.agents = self.possible_agents.copy()
-        
-        # Communication related initialization
-        self.agent_messages = {agent: [] for agent in self.possible_agents}  # Stores incoming messages for each agent
-        self.agent_locations = {agent: np.array([0, 0]) for agent in self.possible_agents}  # Initial locations of agents
 
         # Initialize observation space and action space (as provided earlier)
         self.observation_space = spaces.Dict(
@@ -47,13 +42,9 @@ class ForagingEnvironment(AECEnv):
                 "home_base": spaces.Box(0, size - 1, shape=(2,), dtype=int),
                 "resources": spaces.Box(0, size - 1, shape=(2,), dtype=int),
                 "battery_level": spaces.Box(0, size - 1, shape=(2,), dtype=int),
-                "messages": spaces.Box(0, 255, shape=(size, size), dtype=int)
-
             }
         )
-        
-        self.communication_action_space = spaces.Discrete(2)  # Two options: Send or Acknowledge
-        self.action_space = spaces.Tuple((spaces.Discrete(4), self.communication_action_space))
+        self.action_space = spaces.Discrete(4)
 
         self._action_to_direction = {
             0: np.array([1, 0]),
@@ -89,7 +80,7 @@ class ForagingEnvironment(AECEnv):
         # Reset carrying status and battery level for each agent
         self._carrying = {agent: False for agent in self.possible_agents}
         
-        self._battery_level = {agent: self.initial_battery_level for agent in self.possible_agents}
+        self._battery_level = {agent: self.full_battery_charge for agent in self.possible_agents}
 
         # Set the initial agent selection
         self.agent_selection = self.possible_agents[0]
@@ -108,7 +99,6 @@ class ForagingEnvironment(AECEnv):
 
     def step(self, action):
         agent = self.agent_selection  # Get the current agent
-        movement_action, communication_action = action # unpack the action
 
         # Initialize reward, termination, and truncation
         reward = 0
@@ -116,7 +106,7 @@ class ForagingEnvironment(AECEnv):
         truncation = False
 
         # Check if the agent's battery level is zero or if the agent is already terminated
-        if self._battery_level[agent] == 0 or self.terminations[agent] or movement_action is None:
+        if self._battery_level[agent] == 0 or self.terminations[agent] or action is None:
             self.terminations[agent] = True  # Mark the agent as terminated
 
             # Check if all agents are terminated
@@ -131,7 +121,7 @@ class ForagingEnvironment(AECEnv):
             self._update_agent_selection()
             return
 
-        direction = self._action_to_direction[movement_action]
+        direction = self._action_to_direction[action]
         
         # Calculate the potential new location
         new_location = self._agent_locations[agent] + direction
@@ -145,9 +135,6 @@ class ForagingEnvironment(AECEnv):
         self._agent_locations[agent] = np.clip(
             new_location,           0, self.size - 1
         )
-        
-         # Process communication action
-        self._process_communication(agent, communication_action)
         
         # Reduce battery level
         self._battery_level[agent] -= 1
@@ -163,7 +150,7 @@ class ForagingEnvironment(AECEnv):
         if np.array_equal(self._agent_locations[agent], self._home_base_location) and self._carrying[agent]:
             reward = 1
             self._carrying[agent] = False
-            self._battery_level[agent] = 100
+            self._battery_level[agent] = self.full_battery_charge
 
        # Check termination conditions
         if len(self._resources_location) == 0 and not any(self._carrying.values()):
@@ -182,22 +169,6 @@ class ForagingEnvironment(AECEnv):
             self._render()
 
         return observation, reward, terminated, truncation, info
-    
-    def _process_communication(self, agent, communication_action):
-        print(f"Processing communication for {agent}, Action: {communication_action}")
-        for other_agent in self.agents:
-            if other_agent != agent and self._is_within_fov(agent, other_agent):
-                message = f"Message from {agent}"
-                self.agent_messages[other_agent].append(message)
-                print(f"{agent} sent a message to {other_agent}: '{message}'")
-
-    def _is_within_fov(self, agent, other_agent):
-        # Calculate if other_agent is within agent's fov
-        distance = np.linalg.norm(self._agent_locations[agent] - self._agent_locations[other_agent])
-        within_fov = distance <= self.fov
-        if(within_fov):
-            print(f"Checking FOV: {agent} -> {other_agent}, Distance: {distance}, Within FOV: {within_fov}")
-        return within_fov
     
     def _should_return_to_base(self, agent):
         # Calculate the maximum distance from any point to the base
@@ -373,7 +344,7 @@ class ForagingEnvironment(AECEnv):
                 )
 
        # Visualize the FOV
-        fov = self.fov  # Adjust this if you've defined FOV elsewhere
+        fov = self.fov  
 
         if self.show_fov:
             
@@ -477,8 +448,7 @@ class ForagingEnvironment(AECEnv):
             "agent_location": self._agent_locations[agent],
             "home_base": self._home_base_location,
             "resources": visible_resources,
-            "battery_level": self._battery_level[agent],
-            "messages": self.agent_messages[agent]
+            "battery_level": self._battery_level[agent]
         }
 
     def _get_info(self, agent):

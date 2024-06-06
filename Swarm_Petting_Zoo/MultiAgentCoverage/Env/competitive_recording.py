@@ -49,19 +49,19 @@ def update_q_table(agent, state, action, reward, next_state):
     td_error = td_target - q_table[agent][state][action]
     q_table[agent][state][action] += alpha * td_error
 
-def run_environment(env, record=False, episode_num=None):
+def run_environment(env, record=False, episode_num=None,render=False):
     total_rewards = {agent: 0 for agent in env.agents}
     observations = env.reset()
     done = False
     frame_count = 0
 
     while not done:
-        if env.render_mode == 'human':
+        if render and env.render_mode == 'human':
             env.render()
-            if record and frame_count % 10 == 0:  # Save every 5th frame
-                if not os.path.exists(f'recordings/episode_{episode_num}'):
-                    os.makedirs(f'recordings/episode_{episode_num}')
-                pygame.image.save(env.window, f'recordings/episode_{episode_num}/frame_{frame_count//10}.png')
+            if record and frame_count % 10 == 0:  # Save every 10th frame
+                if not os.path.exists(f'recordings/comp_episode_{episode_num}'):
+                    os.makedirs(f'recordings/comp_episode_{episode_num}')
+                pygame.image.save(env.window, f'recordings/comp_episode_{episode_num}/frame_{frame_count//10}.png')
 
         actions = {agent: choose_action(agent, get_state(observations[agent])) for agent in env.agents}
         next_observations, rewards, terminated, truncation, info = env.step(actions)
@@ -83,7 +83,7 @@ def run_environment(env, record=False, episode_num=None):
 # Run the environment
 for episode in range(num_episodes):
     if episode == 1 or episode == num_episodes - 1:  # Record only the first and last episodes
-        total_reward = run_environment(env, record=True, episode_num=episode)
+        total_reward = run_environment(env, record=True, episode_num=episode,render=True)
     else:
         total_reward = run_environment(env)
     rewards_per_episode.append(total_reward)

@@ -13,7 +13,7 @@ num_actions = env.action_space.n
 q_table = {agent: {} for agent in env.agents}  # Separate Q-table for each agent
 alpha = 0.1
 gamma = 0.99
-num_episodes = 100  # Number of episodes to run
+num_episodes = 50  # Number of episodes to run
 rewards_per_episode = []
 
 epsilon_start = 1.0
@@ -64,7 +64,7 @@ def update_q_table(agent, state, action, reward, next_state):
     td_error = td_target - q_table[agent][state][action]
     q_table[agent][state][action] += alpha * td_error
 
-def run_environment(env, record=False, episode_num=0):
+def run_environment(env, record=False, episode_num=0, render=False):
     total_reward = 0
     observations = env.reset()
     done = False
@@ -112,7 +112,7 @@ def run_environment(env, record=False, episode_num=0):
 
 # Run the environment
 for episode in range(num_episodes):
-    if episode == 0 or episode == num_episodes - 1:  # Record and render only the first and last episodes
+    if episode == 1 or episode == num_episodes - 1:  # Record and render only the first and last episodes
         total_reward = run_environment(env, record=True, episode_num=episode, render=True)
     else:
         total_reward = run_environment(env)

@@ -99,23 +99,6 @@ def run_environment(env):
             break
     return total_rewards
 
-# # Run the environment
-# for episode in range(num_episodes):
-#     total_reward = run_environment(env)
-#     rewards_per_episode.append(total_reward)
-#     print(f"Episode {episode + 1}: Total Reward = {total_reward}")
-
-# env.close()
-
-# # Plotting
-# plt.figure(figsize=(10, 5))
-# plt.plot(rewards_per_episode, label='Reward per Episode')
-# plt.xlabel('Episode')
-# plt.ylabel('Total Reward')
-# plt.title('Learning Progress Over Episodes')
-# plt.legend()
-# plt.show()
-
 # Initialize rewards_per_episode as a dictionary of lists
 rewards_per_episode = {agent: [] for agent in env.agents}
 
