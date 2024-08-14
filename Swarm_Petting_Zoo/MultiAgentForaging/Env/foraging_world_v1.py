@@ -176,10 +176,10 @@ class ForagingEnvironment(AECEnv):
             return True  # The home base can hold any number of agents
 
         # If the agent is carrying a resource, check if the location is occupied by another resource
-        if self._carrying[agent]:
-            for resource_location in self._resources_location:
-                if np.array_equal(location, resource_location):
-                    return False  # Location is occupied by a resource
+        # if self._carrying[agent]:
+        #     for resource_location in self._resources_location:
+        #         if np.array_equal(location, resource_location):
+        #             return False  # Location is occupied by a resource
 
         # For other locations, check if they are occupied by an agent
         for other_agent, agent_location in self._agent_locations.items():

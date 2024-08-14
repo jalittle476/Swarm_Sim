@@ -4,7 +4,7 @@ import numpy as np
 
 def test_subclass_features():
     # Initialize the environment with the auction subclass
-    env = ForagingEnvironmentWithAuction(num_agents=3, size=20, num_resources=5, fov=2, render_mode="human")
+    env = ForagingEnvironmentWithAuction(num_agents=1, size=8, num_resources=5, fov=2, render_mode="human")
     env.reset(seed=42)
 
     # Test for a few steps to observe agent behaviors

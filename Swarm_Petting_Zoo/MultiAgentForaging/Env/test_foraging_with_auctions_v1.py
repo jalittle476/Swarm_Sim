@@ -51,7 +51,7 @@ def foraging_behavior(env, observation, agent, std_dev=0.5):
 
         return gaussian_sample(mean_direction, std_dev)
 
-env = ForagingEnvironmentWithAuction(num_agents=20, size=25, render_mode="human", show_fov=False, draw_numbers=False, num_resources=200)
+env = ForagingEnvironmentWithAuction(num_agents=5, size=20, render_mode="human", show_fov=False, draw_numbers=False, num_resources=200)
 env.reset(seed=42)
 battery_safety_margin = 0
 min_battery_level = env.size

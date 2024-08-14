@@ -18,29 +18,81 @@ class ForagingEnvironmentWithAuction(ForagingEnvironment):
         self._battery_charge_cost = 10  # Cost of one battery charge
         self._battery_charge_amount = 20  # Amount of battery gained per purchase
 
+    # def step(self, action):
+    #     """Extend the step function to include auction functionality."""
+    #     #Call the base class's step function to maintain existing functionality
+    #     _, reward, terminated, truncation, info = super().step(action)
+    #     agent = self.agent_selection  # Get the current agent
+
+    #     #check if the agent has returned to the base with a resource 
+    #     if np.array_equal(self.get_agent_location(agent), self.get_home_base_location()) and self.get_carrying(agent):
+    #         self._money[agent] += self._resource_reward
+    #         print(f"Agent {agent} returned a resource and received a reward of {self._resource_reward}.")
+            
+    #  # Automatically purchase battery charges with available money
+    #     if np.array_equal(self.get_agent_location(agent), self.get_home_base_location()):
+    #         self.purchase_battery_charge(agent)
+
+    #     new_observation = self.observe(agent)
+
+    #     return new_observation, reward, terminated, truncation, info
+    
     def step(self, action):
         """Extend the step function to include auction functionality."""
-        #Call the base class's step function to maintain existing functionality
+        # Call the base class's step function to maintain existing functionality
         observation, reward, terminated, truncation, info = super().step(action)
         agent = self.agent_selection  # Get the current agent
 
-        #check if the agent has returned to the base with a resource 
-        if np.array_equal(self.get_agent_location(agent), self.get_home_base_location) and self.get_carrying(agent):
+        # Calculate the intended new location based on the action
+        direction = self._action_to_direction[action]
+        intended_location = np.clip(self.get_agent_location(agent) + direction, 0, self.size - 1)
+
+        # Print the action and intended movement
+        print(f"Agent {agent} is taking action: {action}, Current Location: {self.get_agent_location(agent)}, Intended Location: {intended_location}")
+
+        # Check if the move is valid
+        if self._is_location_valid(agent, intended_location):
+            print(f"Move is valid. Agent {agent} will move to {intended_location}.")
+        else:
+            print(f"Move is invalid. Agent {agent} remains at {self.get_agent_location(agent)}.")
+
+        # Continue with the base step logic
+        if np.array_equal(self.get_agent_location(agent), self.get_home_base_location()) and self.get_carrying(agent):
             self._money[agent] += self._resource_reward
             print(f"Agent {agent} returned a resource and received a reward of {self._resource_reward}.")
-            
-     # Automatically purchase battery charges with available money
+
         if np.array_equal(self.get_agent_location(agent), self.get_home_base_location()):
             self.purchase_battery_charge(agent)
 
-        return observation, reward, terminated, truncation, info
+        new_observation = self.observe(agent)
+
+        # Print post-step status
+        print(f"Agent {agent} post-step: Location: {self.get_agent_location(agent)}, Carrying: {self.get_carrying(agent)}, Money: {self._money[agent]}, Battery Level: {self._battery_level[agent]}")
+
+        return new_observation, reward, terminated, truncation, info
+
+
+
 
     def purchase_battery_charge(self, agent):
-        """Purchase battery charge using the agent's money if at the home base."""
-        while self._money[agent] >= self._battery_charge_cost:
+        """Purchase battery charge using the agent's money if at the home base, with a cap at full battery charge."""
+        while self._money[agent] >= self._battery_charge_cost and self._battery_level[agent] < self.full_battery_charge:
+            # Calculate how much more battery the agent can purchase without exceeding the full charge
+            charge_needed = self.full_battery_charge - self._battery_level[agent]
+            charge_to_purchase = min(self._battery_charge_amount, charge_needed)
+
+            # Deduct the cost and increase the battery level
             self._money[agent] -= self._battery_charge_cost
-            self._battery_level[agent] += self._battery_charge_amount
-            print(f"Agent {agent} purchased a battery charge for {self._battery_charge_cost} money.")
+            self._battery_level[agent] += charge_to_purchase
+            print(f"Agent {agent} purchased {charge_to_purchase} battery charge for {self._battery_charge_cost} money.")
+            
+            # Stop if the battery is full
+            if self._battery_level[agent] >= self.full_battery_charge:
+                self._battery_level[agent] = self.full_battery_charge  # Ensure it doesn't exceed the max
+                print(f"Agent {agent} has reached full battery capacity: {self._battery_level[agent]}.")
+                break
+
+
 
     def observe(self, agent):
         """Extend observation to include nearby agents' ID and position."""
