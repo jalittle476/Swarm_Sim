@@ -1,20 +1,17 @@
-from foraging_world_v1 import ForagingEnvironment
+from foraging_world_with_auctions import ForagingEnvironmentWithAuction
 import numpy as np
 import pygame
 
-## Foraging Test Without Communication
-## Agents do not communicate and merely enact basic foraging and retrieval algorithms
+# Foraging Test with Auction/Trading
+# Agents perform basic foraging and retrieval algorithms, with added auction functionality
 
 def manhattan_distance(a, b):
     return abs(a[0] - b[0]) + abs(a[1] - b[1])
 
 def gaussian_sample(mean_direction, std_dev=1.0):
-    # `mean_direction` is a 2D vector (dx, dy)
-    # Apply Gaussian noise to the mean direction
     sampled_dx = np.random.normal(mean_direction[0], std_dev)
     sampled_dy = np.random.normal(mean_direction[1], std_dev)
 
-    # Convert sampled direction to discrete action
     if abs(sampled_dx) > abs(sampled_dy):
         return 0 if sampled_dx > 0 else 2  # Right or left
     else:
@@ -24,11 +21,8 @@ def should_return_to_base(battery_level, min_battery_level):
     return battery_level <= min_battery_level
 
 def return_to_base_with_low_battery(agent_location, base_location):
-    # Check if the agent is already at the base
     if np.array_equal(agent_location, base_location):
-        return None  # No action needed, agent is already at the base
-
-    # Otherwise, calculate the direction towards the base
+        return None
     direction = np.array(base_location) - np.array(agent_location)
     return gaussian_sample(direction, std_dev=0.1)
 
@@ -37,9 +31,8 @@ def foraging_behavior(env, observation, agent, std_dev=0.5):
     visible_resources = observation["resources"]
     agent_location = observation["agent_location"]
     base_location = observation["home_base"]
-    base_proximity_threshold = 5  # Define how close is considered 'near' the base
+    base_proximity_threshold = 5
 
-    # Calculate distance to base
     distance_to_base = np.linalg.norm(np.array(base_location) - np.array(agent_location))
 
     if carrying:
@@ -53,21 +46,17 @@ def foraging_behavior(env, observation, agent, std_dev=0.5):
         else:
             mean_direction = np.random.normal(0, std_dev, 2)
 
-        # Directly avoid the base if near and not carrying
         if distance_to_base <= base_proximity_threshold and not carrying:
-            mean_direction = agent_location - base_location  # Direct away from base
+            mean_direction = agent_location - base_location
 
-        new_action = gaussian_sample(mean_direction, std_dev)
-        return new_action
+        return gaussian_sample(mean_direction, std_dev)
 
-env = ForagingEnvironment(num_agents=20, size = 25, render_mode="human", show_fov = False, draw_numbers=False, num_resources=200)
+env = ForagingEnvironmentWithAuction(num_agents=20, size=25, render_mode="human", show_fov=False, draw_numbers=False, num_resources=200)
 env.reset(seed=42)
-battery_safety_margin = 0 # Robot's will not assume perfect knowlege of their battery levels 
-# Define the maximum distance to the base as a threshold
+battery_safety_margin = 0
 min_battery_level = env.size
-base_location = [env.size // 2, env.size // 2]  # Assuming the base is at the center
-exit_simulation = False  # Flag to indicate whether to exit the simulation
-
+base_location = [env.size // 2, env.size // 2]
+exit_simulation = False
 
 for agent in env.agent_iter():
     observation, reward, termination, truncation, info = env.last()
@@ -76,10 +65,10 @@ for agent in env.agent_iter():
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_p:
                 env.paused = not env.paused
-            elif event.key == pygame.K_q:  # Check if the 'Q' key is pressed
-                exit_simulation = True      # Set the flag to exit the simulation
+            elif event.key == pygame.K_q:
+                exit_simulation = True
 
-    if exit_simulation:  # Check the flag before continuing the simulation
+    if exit_simulation:
         print("Exiting simulation.")
         break
     
@@ -91,19 +80,14 @@ for agent in env.agent_iter():
         else:
             action = foraging_behavior(env, observation, agent)
 
-
-
         env.step(action)
         
-    # Check if all agents are terminated, then pause
     if all(env.terminations.values()):
         print("All agents are terminated. Press any key to exit.")
 
-        # Refresh/render the screen one last time before pausing
         if env.render_mode == "human":
             env._render()
 
-        # Wait for a key press to exit
         waiting_for_input = True
         while waiting_for_input:
             for event in pygame.event.get():
@@ -115,4 +99,3 @@ for agent in env.agent_iter():
             break
 
 env.close()
-

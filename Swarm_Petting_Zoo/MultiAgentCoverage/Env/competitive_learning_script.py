@@ -4,7 +4,7 @@ from competitive_coverage_world import CoverageEnvironment
 import matplotlib.pyplot as plt
 
 # Initialize the environment
-env = CoverageEnvironment(num_agents=2, max_steps=1000, render_mode='none', size=10, seed=123)
+env = CoverageEnvironment(num_agents=10, max_steps=1000, render_mode='human', size=10, seed=123)
 
 # Q-Learning setup
 num_states = env.size * env.size

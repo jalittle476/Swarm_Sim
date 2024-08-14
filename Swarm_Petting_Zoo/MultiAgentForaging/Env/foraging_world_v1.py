@@ -35,7 +35,7 @@ class ForagingEnvironment(AECEnv):
         self.agent_selection = self.possible_agents[0]
         self.agents = self.possible_agents.copy()
 
-        # Initialize observation space and action space (as provided earlier)
+        # Initialize observation space and action space 
         self.observation_space = spaces.Dict(
             {
                 "agent_location": spaces.Box(0, size - 1, shape=(2,), dtype=int),
@@ -169,13 +169,6 @@ class ForagingEnvironment(AECEnv):
             self._render()
 
         return observation, reward, terminated, truncation, info
-    
-    def _should_return_to_base(self, agent):
-        # Calculate the maximum distance from any point to the base
-        max_distance_to_base = (self.size // 2) * 2  # Adjust this calculation if necessary
-
-        # Check if the agent's battery level is below the threshold
-        return self._battery_level[agent] <= max_distance_to_base
     
     def _is_location_valid(self, agent, location):
         # Check if the location is the home base
