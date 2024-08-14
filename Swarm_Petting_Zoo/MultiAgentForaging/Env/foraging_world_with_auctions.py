@@ -38,38 +38,28 @@ class ForagingEnvironmentWithAuction(ForagingEnvironment):
     #     return new_observation, reward, terminated, truncation, info
     
     def step(self, action):
-        """Extend the step function to include auction functionality."""
+        """Extend the step function to handle purchases and auction functionality."""
         # Call the base class's step function to maintain existing functionality
         observation, reward, terminated, truncation, info = super().step(action)
         agent = self.agent_selection  # Get the current agent
 
-        # Calculate the intended new location based on the action
-        direction = self._action_to_direction[action]
-        intended_location = np.clip(self.get_agent_location(agent) + direction, 0, self.size - 1)
-
-        # Print the action and intended movement
-        print(f"Agent {agent} is taking action: {action}, Current Location: {self.get_agent_location(agent)}, Intended Location: {intended_location}")
-
-        # Check if the move is valid
-        if self._is_location_valid(agent, intended_location):
-            print(f"Move is valid. Agent {agent} will move to {intended_location}.")
-        else:
-            print(f"Move is invalid. Agent {agent} remains at {self.get_agent_location(agent)}.")
-
-        # Continue with the base step logic
-        if np.array_equal(self.get_agent_location(agent), self.get_home_base_location()) and self.get_carrying(agent):
+        # Check if the agent has received a reward (i.e., returned a resource)
+        if reward > 0:
             self._money[agent] += self._resource_reward
-            print(f"Agent {agent} returned a resource and received a reward of {self._resource_reward}.")
+            print(f"Agent {agent} returned a resource and earned {self._resource_reward} money. Total Money: {self._money[agent]}.")
 
+        # Automatically purchase battery charges with available money if at home base
         if np.array_equal(self.get_agent_location(agent), self.get_home_base_location()):
             self.purchase_battery_charge(agent)
 
+        # Ensure all observations and updates are consistent
         new_observation = self.observe(agent)
 
-        # Print post-step status
-        print(f"Agent {agent} post-step: Location: {self.get_agent_location(agent)}, Carrying: {self.get_carrying(agent)}, Money: {self._money[agent]}, Battery Level: {self._battery_level[agent]}")
+        # Print post-step status for debugging
+        #print(f"Agent {agent} post-step: Location: {self.get_agent_location(agent)}, Carrying: {self.get_carrying(agent)}, Money: {self._money[agent]}, Battery Level: {self._battery_level[agent]}")
 
         return new_observation, reward, terminated, truncation, info
+
 
 
 
@@ -84,12 +74,12 @@ class ForagingEnvironmentWithAuction(ForagingEnvironment):
             # Deduct the cost and increase the battery level
             self._money[agent] -= self._battery_charge_cost
             self._battery_level[agent] += charge_to_purchase
-            print(f"Agent {agent} purchased {charge_to_purchase} battery charge for {self._battery_charge_cost} money.")
+            #print(f"Agent {agent} purchased {charge_to_purchase} battery charge for {self._battery_charge_cost} money.")
             
             # Stop if the battery is full
             if self._battery_level[agent] >= self.full_battery_charge:
                 self._battery_level[agent] = self.full_battery_charge  # Ensure it doesn't exceed the max
-                print(f"Agent {agent} has reached full battery capacity: {self._battery_level[agent]}.")
+                #print(f"Agent {agent} has reached full battery capacity: {self._battery_level[agent]}.")
                 break
 
 

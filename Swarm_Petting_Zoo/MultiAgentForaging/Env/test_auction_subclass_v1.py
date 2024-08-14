@@ -4,11 +4,11 @@ import numpy as np
 
 def test_subclass_features():
     # Initialize the environment with the auction subclass
-    env = ForagingEnvironmentWithAuction(num_agents=1, size=8, num_resources=5, fov=2, render_mode="human")
+    env = ForagingEnvironmentWithAuction(num_agents=5, size=20, num_resources=5, fov=2, render_mode="human")
     env.reset(seed=42)
 
     # Test for a few steps to observe agent behaviors
-    for step in range(10):
+    for step in range(5):
         print(f"Step {step + 1}")
         for agent in env.agents:
             action = env.action_space.sample()  # Sample a random action for each agent
