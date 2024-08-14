@@ -12,36 +12,20 @@ class ForagingEnvironmentWithAuction(ForagingEnvironment):
         self.local_interaction_range = fov  # Set the interaction range equal to FOV
         self.auction_history = []  # To track past auctions if needed
 
-        # Initialize money for each agent
         self._money = {agent: 100 for agent in self.agents}  # Starting money can be adjusted
         self._resource_reward = 50  # Amount paid for returning a resource
-        self._battery_charge_cost = 10  # Cost of one battery charge
-        self._battery_charge_amount = 20  # Amount of battery gained per purchase
-
-    # def step(self, action):
-    #     """Extend the step function to include auction functionality."""
-    #     #Call the base class's step function to maintain existing functionality
-    #     _, reward, terminated, truncation, info = super().step(action)
-    #     agent = self.agent_selection  # Get the current agent
-
-    #     #check if the agent has returned to the base with a resource 
-    #     if np.array_equal(self.get_agent_location(agent), self.get_home_base_location()) and self.get_carrying(agent):
-    #         self._money[agent] += self._resource_reward
-    #         print(f"Agent {agent} returned a resource and received a reward of {self._resource_reward}.")
-            
-    #  # Automatically purchase battery charges with available money
-    #     if np.array_equal(self.get_agent_location(agent), self.get_home_base_location()):
-    #         self.purchase_battery_charge(agent)
-
-    #     new_observation = self.observe(agent)
-
-    #     return new_observation, reward, terminated, truncation, info
-    
+        self._battery_usage_rate = 1  # Example battery usage rate per step
+        self._battery_charge_cost = 10  # Cost to charge battery
+        self._battery_charge_amount = 10  # Amount of charge per purchase
+        
     def step(self, action):
         """Extend the step function to handle purchases and auction functionality."""
         # Call the base class's step function to maintain existing functionality
-        observation, reward, terminated, truncation, info = super().step(action)
+        _, reward, terminated, truncation, info = super().step(action)
         agent = self.agent_selection  # Get the current agent
+
+        # Decrement battery after each step
+        self._decrement_battery(agent)
 
         # Check if the agent has received a reward (i.e., returned a resource)
         if reward > 0:
@@ -56,31 +40,43 @@ class ForagingEnvironmentWithAuction(ForagingEnvironment):
         new_observation = self.observe(agent)
 
         # Print post-step status for debugging
-        #print(f"Agent {agent} post-step: Location: {self.get_agent_location(agent)}, Carrying: {self.get_carrying(agent)}, Money: {self._money[agent]}, Battery Level: {self._battery_level[agent]}")
+        print(f"Agent {agent} post-step: Location: {self.get_agent_location(agent)}, Carrying: {self.get_carrying(agent)}, Money: {self._money[agent]}, Battery Level: {self._battery_level[agent]}")
 
         return new_observation, reward, terminated, truncation, info
 
-
-
-
+    def _decrement_battery(self, agent):
+        """Decrement the battery level of an agent."""
+        if self._battery_level[agent] > 0:
+            self._battery_level[agent] -= self._battery_usage_rate
+            print(f"Agent {agent} used battery charge. Current battery level: {self._battery_level[agent]}")
+        if self._battery_level[agent] <= 0:
+            self.terminations[agent] = True  # Terminate agent if battery is depleted
+            print(f"Agent {agent} battery depleted and is now terminated.")
 
     def purchase_battery_charge(self, agent):
         """Purchase battery charge using the agent's money if at the home base, with a cap at full battery charge."""
+        print(f"Agent {agent} - Initial Money: {self._money[agent]}, Initial Battery: {self._battery_level[agent]}")
+        
         while self._money[agent] >= self._battery_charge_cost and self._battery_level[agent] < self.full_battery_charge:
-            # Calculate how much more battery the agent can purchase without exceeding the full charge
             charge_needed = self.full_battery_charge - self._battery_level[agent]
             charge_to_purchase = min(self._battery_charge_amount, charge_needed)
 
+            # Debug: Check values before purchasing
+            print(f"Attempting purchase: Charge Needed: {charge_needed}, Charge to Purchase: {charge_to_purchase}, Current Battery: {self._battery_level[agent]}, Money: {self._money[agent]}")
+            
             # Deduct the cost and increase the battery level
             self._money[agent] -= self._battery_charge_cost
             self._battery_level[agent] += charge_to_purchase
-            #print(f"Agent {agent} purchased {charge_to_purchase} battery charge for {self._battery_charge_cost} money.")
-            
-            # Stop if the battery is full
+
+            # Debug: Check values after purchasing
+            print(f"Agent {agent} purchased {charge_to_purchase} battery charge for {self._battery_charge_cost} money. Remaining Money: {self._money[agent]}, New Battery Level: {self._battery_level[agent]}")
+
             if self._battery_level[agent] >= self.full_battery_charge:
                 self._battery_level[agent] = self.full_battery_charge  # Ensure it doesn't exceed the max
-                #print(f"Agent {agent} has reached full battery capacity: {self._battery_level[agent]}.")
+                print(f"Agent {agent} has reached full battery capacity: {self._battery_level[agent]}.")
                 break
+
+        print(f"Agent {agent} - Final Money: {self._money[agent]}, Final Battery: {self._battery_level[agent]}")
 
 
 

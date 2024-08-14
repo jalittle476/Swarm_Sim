@@ -2,7 +2,7 @@ from foraging_world_with_auctions import ForagingEnvironmentWithAuction
 import numpy as np
 import pygame
 
-# Foraging Test with Auction/Trading
+# Foraging Test with some economic features
 # Agents perform basic foraging and retrieval algorithms, with added auction functionality
 
 def manhattan_distance(a, b):

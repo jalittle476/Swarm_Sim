@@ -137,7 +137,7 @@ class ForagingEnvironment(AECEnv):
         )
         
         # Reduce battery level
-        self._battery_level[agent] -= 1
+        #self._battery_level[agent] -= 1
 
         # Check if the agent is on a resource location
         for i in range(len(self._resources_location)):
@@ -150,7 +150,7 @@ class ForagingEnvironment(AECEnv):
         if np.array_equal(self._agent_locations[agent], self._home_base_location) and self._carrying[agent]:
             reward = 1
             self._carrying[agent] = False
-            self._battery_level[agent] = self.full_battery_charge
+            #self._battery_level[agent] = self.full_battery_charge
 
        # Check termination conditions
         if len(self._resources_location) == 0 and not any(self._carrying.values()):
