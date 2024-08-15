@@ -41,6 +41,7 @@ class ForagingEnvironmentWithAuction(ForagingEnvironment):
 
         # Print post-step status for debugging
         print(f"Agent {agent} post-step: Location: {self.get_agent_location(agent)}, Carrying: {self.get_carrying(agent)}, Money: {self._money[agent]}, Battery Level: {self._battery_level[agent]}")
+        print("-" * 30)
 
         return new_observation, reward, terminated, truncation, info
 
