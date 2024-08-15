@@ -95,10 +95,11 @@ def test_subclass_features(step_limit=10):
             if step_count >= step_limit:
                 print(f"Reached step limit of {step_limit}. Exiting simulation.")
                 break
-
+            
+            time.sleep(1)
         # Render the environment after each step
         env.render()
-        time.sleep(1)
+        
 
         # Check if all agents are terminated
         if all(env.terminations.values()):
