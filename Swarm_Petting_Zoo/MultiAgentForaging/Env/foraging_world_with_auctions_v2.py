@@ -1,8 +1,3 @@
-
-
- #Extending the ForagingEnvironment to include auction capabilities
-
-
 from foraging_world_v1 import ForagingEnvironment  # Importing your base environment
 import numpy as np
 
@@ -19,7 +14,41 @@ class ForagingEnvironmentWithAuction(ForagingEnvironment):
         self._battery_usage_rate = 1  # Example battery usage rate per step
         self._battery_charge_cost = 10  # Cost to charge battery
         self._battery_charge_amount = 10  # Amount of charge per purchase
-        
+
+    def move_towards_base(self, agent):
+        current_location = self.get_agent_location(agent)
+        home_base_location = self.get_home_base_location()
+        direction = np.array(home_base_location) - np.array(current_location)
+        if abs(direction[0]) > abs(direction[1]):
+            return 0 if direction[0] > 0 else 2  # Move right or left
+        else:
+            return 1 if direction[1] > 0 else 3  # Move down or up
+
+    def decide_action(self, agent):
+        if self.get_carrying(agent):
+            return self.move_towards_base(agent)
+        else:
+            return self.action_space.sample()
+
+    def check_agent_state(self, agent, observation):
+        if observation['battery_level'] <= 0:
+            self.terminations[agent] = True
+            print(f"Agent {agent} battery depleted and is now terminated.")
+            return True  # Indicate that the agent should be terminated
+        return False
+
+    def log_agent_state(self, agent, observation):
+        log_msg = (
+            f"----------------------------------------\n"
+            f"Agent {agent} post-step:\n"
+            f"- Location: {self.get_agent_location(agent)}\n"
+            f"- Carrying: {self.get_carrying(agent)}\n"
+            f"- Money: {observation['money']}\n"
+            f"- Battery Level: {observation['battery_level']}\n"
+            f"----------------------------------------"
+        )
+        print(log_msg)
+
     def step(self, action):
         """Extend the step function to handle purchases and auction functionality."""
         # Call the base class's step function to maintain existing functionality
@@ -41,9 +70,8 @@ class ForagingEnvironmentWithAuction(ForagingEnvironment):
         # Ensure all observations and updates are consistent
         new_observation = self.observe(agent)
 
-        # Print post-step status for debugging
-        print(f"Agent {agent} post-step: Location: {self.get_agent_location(agent)}, Carrying: {self.get_carrying(agent)}, Money: {self._money[agent]}, Battery Level: {self._battery_level[agent]}")
-        print("-" * 30)
+        # Log post-step status for debugging
+        self.log_agent_state(agent, new_observation)
 
         return new_observation, reward, terminated, truncation, info
 
@@ -80,8 +108,6 @@ class ForagingEnvironmentWithAuction(ForagingEnvironment):
                 break
 
         print(f"Agent {agent} - Final Money: {self._money[agent]}, Final Battery: {self._battery_level[agent]}")
-
-
 
     def observe(self, agent):
         """Extend observation to include nearby agents' ID and position."""
@@ -133,5 +159,4 @@ class ForagingEnvironmentWithAuction(ForagingEnvironment):
   
     def get_money(self, agent):
         """Retrieve the money of an agent."""
-        # Assuming money is tracked in a dictionary like self._money[agent]
         return self._money[agent]  # Adjust this based on your actual implementation

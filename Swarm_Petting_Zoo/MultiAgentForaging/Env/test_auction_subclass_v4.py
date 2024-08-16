@@ -1,63 +1,48 @@
 from foraging_world_with_auctions_v2 import ForagingEnvironmentWithAuction
 import time
-import numpy as np
-
-def manhattan_distance(a, b):
-    """Calculate the Manhattan distance between two points."""
-    return abs(a[0] - b[0]) + abs(a[1] - b[1])
-
-def return_to_base(env, agent):
-    """Determine the action to move the agent towards the home base."""
-    current_location = env.get_agent_location(agent)
-    home_base_location = env.get_home_base_location()
-    direction = np.array(home_base_location) - np.array(current_location)
-    if abs(direction[0]) > abs(direction[1]):
-        return 0 if direction[0] > 0 else 2
-    else:
-        return 1 if direction[1] > 0 else 3
-
-def foraging_behavior(env, agent):
-    """Determine the action for the agent based on its state."""
-    if env.get_carrying(agent):
-        return return_to_base(env, agent)
-    else:
-        return env.action_space.sample()
 
 def test_subclass_features(step_limit=10):
+    # Initialize the environment with the auction subclass
     env = ForagingEnvironmentWithAuction(num_agents=2, size=20, num_resources=5, fov=2, render_mode="human")
     env.reset(seed=42)
 
     step_count = 0
+
     while step_count < step_limit:
         for agent in env.agent_iter():
             observation, reward, termination, truncation, info = env.last(observe=False)
+
+            # Print the step count header before any actions are taken
+            print(f"\n=== Step {step_count + 1} ===")  # Enhanced step count header
+
             if termination or truncation:
                 env.step(None)
                 continue
-
-            action = foraging_behavior(env, agent)
-            env.step(action)
+            
+            #Observe and Log agent state
             obs = env.observe(agent)
+            #env.log_agent_state(agent, obs)
+            
+            # Decide and execute the action
+            action = env.decide_action(agent)
+            env.step(action)
+            
 
-            if obs['battery_level'] <= 0:
-                env.terminations[agent] = True
+            # Check agent state and handle battery depletion or other state changes
+            if env.check_agent_state(agent, obs):
                 env.step(None)
                 continue
 
-            print(f"Agent {agent} post-step: Location: {env.get_agent_location(agent)}, Carrying: {env.get_carrying(agent)}, Money: {obs['money']}, Battery Level: {obs['battery_level']}")
+
             env.render()
             time.sleep(1)
 
-            step_count += 1  # Increment the step count after each agent's action
-            if step_count >= step_limit:
-                print(f"Reached step limit of {step_limit}. Exiting simulation.")
+            step_count += 1
+            if step_count >= step_limit or all(env.terminations.values()):
                 break
 
-        if step_count >= step_limit:
-            break  # Ensure the outer loop exits if the step limit is reached
-
-        if all(env.terminations.values()):
-            print("All agents are terminated. Exiting simulation.")
+        # If the outer loop conditions are met, ensure the loop terminates
+        if step_count >= step_limit or all(env.terminations.values()):
             break
 
     env.close()
