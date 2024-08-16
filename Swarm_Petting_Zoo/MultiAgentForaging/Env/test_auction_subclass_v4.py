@@ -1,9 +1,9 @@
 from foraging_world_with_auctions_v2 import ForagingEnvironmentWithAuction
 import time
 
-def test_subclass_features(step_limit=10):
+def test_subclass_features(step_limit=20):
     # Initialize the environment with the auction subclass
-    env = ForagingEnvironmentWithAuction(num_agents=2, size=20, num_resources=5, fov=2, render_mode="human")
+    env = ForagingEnvironmentWithAuction(num_agents=2, size=20, num_resources=5, fov=5, render_mode="human")
     env.reset(seed=42)
 
     step_count = 0
@@ -19,14 +19,13 @@ def test_subclass_features(step_limit=10):
                 env.step(None)
                 continue
             
-            #Observe and Log agent state
-            obs = env.observe(agent)
-            #env.log_agent_state(agent, obs)
-            
             # Decide and execute the action
             action = env.decide_action(agent)
             env.step(action)
             
+            #Observe and Log agent state
+            obs = env.observe(agent)
+            #env.log_agent_state(agent, obs, env.agent_states[agent])
 
             # Check agent state and handle battery depletion or other state changes
             if env.check_agent_state(agent, obs):

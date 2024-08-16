@@ -2,33 +2,115 @@ from foraging_world_v1 import ForagingEnvironment  # Importing your base environ
 import numpy as np
 
 class ForagingEnvironmentWithAuction(ForagingEnvironment):
-    def __init__(self, num_agents, render_mode=None, size=20, seed=255, num_resources=5, fov=2, show_fov=False, show_gridlines=False, draw_numbers=False, record_sim=False):
+    def __init__(self, num_agents, render_mode=None, size=20, seed=255, num_resources=5, fov=5, show_fov=False, show_gridlines=False, draw_numbers=False, record_sim=False):
         super().__init__(num_agents, render_mode, size, seed, num_resources, fov, show_fov, show_gridlines, draw_numbers, record_sim)
         self.local_interaction_range = fov  # Set the interaction range equal to FOV
         self.auction_history = []  # To track past auctions if needed
         self.initialize_agents()  # Initialize agent-specific attributes
 
-    def initialize_agents(self):
-        self._money = {agent: 100 for agent in self.agents}  # Starting money can be adjusted
-        self._resource_reward = 50  # Amount paid for returning a resource
-        self._battery_usage_rate = 1  # Example battery usage rate per step
-        self._battery_charge_cost = 10  # Cost to charge battery
-        self._battery_charge_amount = 10  # Amount of charge per purchase
 
-    def move_towards_base(self, agent):
-        current_location = self.get_agent_location(agent)
-        home_base_location = self.get_home_base_location()
-        direction = np.array(home_base_location) - np.array(current_location)
-        if abs(direction[0]) > abs(direction[1]):
-            return 0 if direction[0] > 0 else 2  # Move right or left
+        # Default standard deviations for different behaviors
+        self.std_dev_base_return = 0.5
+        self.std_dev_foraging = 0.1
+
+    def initialize_agents(self):
+        self._money = {agent: 100 for agent in self.agents}
+        self._resource_reward = 50
+        self._battery_usage_rate = 1
+        self._battery_charge_cost = 10
+        self._battery_charge_amount = 10
+        
+        # Initialize the state of each agent
+        self.agent_states = {agent: "Foraging" for agent in self.agents}  # Default state is "Foraging"
+
+    def calculate_direction(self, start, end):
+        """Calculate the direction vector from start to end."""
+        return np.array(end) - np.array(start)
+
+    def adjust_base_proximity_threshold(self, agent, base_threshold=0, max_threshold=5):
+        """Adjust the base proximity threshold based on local agent density."""
+        local_density = self.calculate_local_density(agent)
+        # Simple linear scaling of threshold based on local density
+        adjusted_threshold = min(base_threshold + local_density, max_threshold)
+        return adjusted_threshold
+
+    def gaussian_sample(self, direction, std_dev):
+        """Sample a discrete action based on the direction vector with added Gaussian noise."""
+        # Normalize the direction vector
+        norm = np.linalg.norm(direction)
+        if norm != 0:
+            direction = direction / norm
+        
+        sampled_direction = np.random.normal(direction, std_dev)
+        print(f"Original direction: {direction}, Sampled direction: {sampled_direction}")
+        
+        if abs(sampled_direction[0]) > abs(sampled_direction[1]):
+            return 0 if sampled_direction[0] > 0 else 2  # Move right or left
         else:
-            return 1 if direction[1] > 0 else 3  # Move down or up
+            return 1 if sampled_direction[1] > 0 else 3  # Move down or up
+
+    def should_return_to_base(self, battery_level, min_battery_level):
+        """Check if the agent should return to the base based on its battery level."""
+        return battery_level <= min_battery_level
+
+    def return_to_base(self, agent_location, base_location):
+        """Generate an action to return the agent to the base."""
+        if np.array_equal(agent_location, base_location):
+            return None  # No action needed, agent is already at the base
+        direction_to_base = self.calculate_direction(agent_location, base_location)
+        return self.gaussian_sample(direction_to_base, self.std_dev_base_return)
+
+    def foraging_behavior(self, agent, observation):
+        """Determine the agent's action based on its state and environment."""
+        carrying = self.get_carrying(agent)
+        visible_resources = observation["resources"]
+        agent_location = observation["agent_location"]
+        base_location = observation["home_base"]
+       # Dynamically adjust the base proximity threshold to avoid base if not carrying
+        base_proximity_threshold = self.adjust_base_proximity_threshold(agent)
+
+        distance_to_base = np.linalg.norm(self.calculate_direction(agent_location, base_location))
+
+        if carrying:
+            return self.return_to_base(agent_location, base_location)
+        else:
+            if visible_resources:
+                nearest_resource = min(visible_resources, key=lambda r: self.manhattan_distance(agent_location, r))
+                direction_to_resource = self.calculate_direction(agent_location, nearest_resource)
+            else:
+                direction_to_resource = np.random.normal(0, self.std_dev_foraging, 2)  # Random exploration direction
+
+            # # Avoid base if near and not carrying a resource
+            # if distance_to_base <= base_proximity_threshold:
+            #     direction_to_resource = -self.calculate_direction(agent_location, base_location)  # Direct away from base
+
+            return self.gaussian_sample(direction_to_resource, self.std_dev_foraging)
+
+    def manhattan_distance(self, a, b):
+        """Calculate the Manhattan distance between two points."""
+        return abs(a[0] - b[0]) + abs(a[1] - b[1])
 
     def decide_action(self, agent):
-        if self.get_carrying(agent):
-            return self.move_towards_base(agent)
-        else:
-            return self.action_space.sample()
+        """Decide on an action for the agent based on its state and log the state."""
+        observation = self.observe(agent)
+        battery_level = observation['battery_level']
+        min_battery_level = 10  # Threshold for returning to base
+        carrying = self.get_carrying(agent)
+
+        # Determine state based on conditions
+        if carrying or self.should_return_to_base(battery_level, min_battery_level):
+            state = "Returning to Base"
+            action = self.return_to_base(self.get_agent_location(agent), self.get_home_base_location())
+            if action is not None:
+                self.log_agent_state(agent, observation, state)
+                return action
+
+        # Default state: Foraging
+        state = "Foraging"
+        action = self.foraging_behavior(agent, observation)
+
+        self.log_agent_state(agent, observation, state)
+        return action
 
     def check_agent_state(self, agent, observation):
         if observation['battery_level'] <= 0:
@@ -37,10 +119,12 @@ class ForagingEnvironmentWithAuction(ForagingEnvironment):
             return True  # Indicate that the agent should be terminated
         return False
 
-    def log_agent_state(self, agent, observation):
+    def log_agent_state(self, agent, observation, state):
+        """Log the agent's state, location, and other important details."""
         log_msg = (
             f"----------------------------------------\n"
             f"Agent {agent} post-step:\n"
+            f"- State: {state}\n"
             f"- Location: {self.get_agent_location(agent)}\n"
             f"- Carrying: {self.get_carrying(agent)}\n"
             f"- Money: {observation['money']}\n"
@@ -71,7 +155,7 @@ class ForagingEnvironmentWithAuction(ForagingEnvironment):
         new_observation = self.observe(agent)
 
         # Log post-step status for debugging
-        self.log_agent_state(agent, new_observation)
+       #self.log_agent_state(agent, new_observation,self.agent_states[agent])
 
         return new_observation, reward, terminated, truncation, info
 
@@ -160,3 +244,17 @@ class ForagingEnvironmentWithAuction(ForagingEnvironment):
     def get_money(self, agent):
         """Retrieve the money of an agent."""
         return self._money[agent]  # Adjust this based on your actual implementation
+
+    def calculate_local_density(self, agent):
+        """Calculate the number of agents within a local interaction range."""
+        agent_location = self.get_agent_location(agent)
+        local_density = 0
+        
+        for other_agent in self.agents:
+            if other_agent != agent:  # Don't count the agent itself
+                other_agent_location = self.get_agent_location(other_agent)
+                distance_to_other_agent = np.linalg.norm(self.calculate_direction(agent_location, other_agent_location))
+                if distance_to_other_agent <= self.local_interaction_range:
+                    local_density += 1
+        
+        return local_density
