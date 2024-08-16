@@ -1,6 +1,7 @@
 import copy
 
 from pettingzoo.utils.env import AECEnv
+from pettingzoo.utils import agent_selector
 from gym import spaces
 import numpy as np
 import pygame
@@ -83,9 +84,9 @@ class ForagingEnvironment(AECEnv):
         self._battery_level = {agent: self.full_battery_charge for agent in self.possible_agents}
 
         # Set the initial agent selection
-        self.agent_selection = self.possible_agents[0]
+        #self.agent_selection = self.possible_agents[0]
         
-        self.agents = self.possible_agents.copy()
+        #self.agents = self.possible_agents.copy()
         
         self.agents = self.possible_agents[:]
         self.rewards = {agent: 0 for agent in self.agents}
@@ -93,9 +94,13 @@ class ForagingEnvironment(AECEnv):
         self.terminations = {agent: False for agent in self.agents}
         self.truncations = {agent: False for agent in self.agents}
         self.infos = {agent: {} for agent in self.agents}
+        
+        self._agent_selector = agent_selector(self.agents)
+        self.agent_selection = self._agent_selector.next()
 
         # Return observation for the first agent and general info
-        return self._get_obs(self.agent_selection), self._get_info(self.agent_selection)
+        #return self._get_obs(self.agent_selection), self._get_info(self.agent_selection)
+
 
     def step(self, action):
         agent = self.agent_selection  # Get the current agent
@@ -105,7 +110,7 @@ class ForagingEnvironment(AECEnv):
         terminated = False
         truncation = False
 
-        # Check if the agent's battery level is zero or if the agent is already terminated
+        # Handle cases where the agent's battery is depleted, agent is terminated, or action is None
         if self._battery_level[agent] == 0 or self.terminations[agent] or action is None:
             self.terminations[agent] = True  # Mark the agent as terminated
 
@@ -114,29 +119,23 @@ class ForagingEnvironment(AECEnv):
                 terminated = True
                 reward = -100  # Adjust this based on your reward scheme
 
-                observation, _, _, truncation, info = self.last()
+                observation = self._get_obs(agent)
+                info = self._get_info(agent)
                 return observation, reward, terminated, truncation, info
 
-            # Skip the rest of the step for this agent
-            self._update_agent_selection()
-            return
+            return  # If terminated, end the step here without doing anything else
 
+        # Process the action: Determine the new direction and location
         direction = self._action_to_direction[action]
-        
-        # Calculate the potential new location
         new_location = self._agent_locations[agent] + direction
-        
-        # Check if the new location is not occupied by another agent
+
+        # Validate the new location and possibly avoid collisions
         if not self._is_location_valid(agent, new_location):
-            # Try to avoid other agent
-            new_location = self._simple_avoidance(agent,direction)
+            new_location = self._simple_avoidance(agent, direction)
         
-        # Move the agent to available space
-        self._agent_locations[agent] = np.clip(
-            new_location,           0, self.size - 1
-        )
-        
-        # Check if the agent is on a resource location
+        self._agent_locations[agent] = np.clip(new_location, 0, self.size - 1)
+
+        # Handle resource collection if the agent is on a resource location
         for i in range(len(self._resources_location)):
             if np.array_equal(self._agent_locations[agent], self._resources_location[i]) and not self._carrying[agent]:
                 self._carrying[agent] = True
@@ -148,16 +147,16 @@ class ForagingEnvironment(AECEnv):
             reward = 1
             self._carrying[agent] = False
 
-       # Check termination conditions
+        # If no resources remain, terminate the environment
         if len(self._resources_location) == 0 and not any(self._carrying.values()):
             terminated = True
 
-        observation = self._get_obs(agent)
+        observation = self.observe(agent)
         info = self._get_info(agent)
-
-        # Update selected agent for the next step
-        self._update_agent_selection()
         
+        # selects the next agent.
+        self.agent_selection = self._agent_selector.next()
+
         if all(self.terminations.values()):
             terminated = True
             
@@ -165,6 +164,7 @@ class ForagingEnvironment(AECEnv):
             self._render()
 
         return observation, reward, terminated, truncation, info
+
     
     def _is_location_valid(self, agent, location):
         # Check if the location is the home base

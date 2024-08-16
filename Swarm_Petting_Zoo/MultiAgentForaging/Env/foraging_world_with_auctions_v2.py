@@ -136,8 +136,8 @@ class ForagingEnvironmentWithAuction(ForagingEnvironment):
     def step(self, action):
         """Extend the step function to handle purchases and auction functionality."""
         # Call the base class's step function to maintain existing functionality
-        _, reward, terminated, truncation, info = super().step(action)
         agent = self.agent_selection  # Get the current agent
+        _, reward, terminated, truncation, info = super().step(action)
 
         # Decrement battery after each step
         self._decrement_battery(agent)
