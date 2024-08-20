@@ -153,9 +153,23 @@ class ForagingEnvironmentWithAuction(ForagingEnvironment):
 
         # Ensure all observations and updates are consistent
         new_observation = self.observe(agent)
+        
+        # Check if the agent is terminated due to battery depletion
+        if self._battery_level[agent] <= 0:
+            terminated = True  # Ensure the terminated flag is set
+            self.terminations[agent] = True  # Ensure the agent is marked as terminated
+            print(f"Agent {agent} battery depleted and is now terminated.")
+            return new_observation, reward, terminated, truncation, info
 
-        # Log post-step status for debugging
+       # Log post-step status for debugging
        #self.log_agent_state(agent, new_observation,self.agent_states[agent])
+
+        # Advance to the next agent or end the episode if all agents are terminated
+        if all(self.terminations.values()):
+            print("All agents terminated. Ending the simulation.")
+            return new_observation, reward, True, truncation, info
+
+
 
         return new_observation, reward, terminated, truncation, info
 

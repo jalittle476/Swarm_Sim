@@ -6,7 +6,7 @@ def test_subclass_features(step_limit=5):
     env = ForagingEnvironmentWithAuction(num_agents=2, size=20, num_resources=5, fov=5, render_mode="human")
     env.reset(seed=42)
 
-    for agent in env.agent_iter(max_iter=step_limit):
+    for agent in env.agent_iter():
 
         observation, reward, termination, truncation, info = env.last(observe=False)
 
@@ -17,7 +17,7 @@ def test_subclass_features(step_limit=5):
             action = None
         
         # Decide and execute the action
-        # action = env.decide_action(agent)
+        #action = env.decide_action(agent)
         action = env.action_space.sample()
         env.step(action)
      
@@ -26,14 +26,14 @@ def test_subclass_features(step_limit=5):
         obs = env.observe(agent)
         env.log_agent_state(agent, obs, env.agent_states[agent])
 
-        # Check agent state and handle battery depletion or other state changes
-        if env.check_agent_state(agent, obs):
-            env.step(None)
-            continue
 
+         # Check if all agents are terminated
+        if all(env.terminations.values()):
+            print("All agents terminated. Ending the simulation.")
+            break
 
         env.render()
-        time.sleep(1)
+        #time.sleep(1)
 
     env.close()
 

@@ -109,21 +109,23 @@ class ForagingEnvironment(AECEnv):
         reward = 0
         terminated = False
         truncation = False
+        observation = self.observe(agent)
+        info = self._get_info(agent)
 
         # Handle cases where the agent's battery is depleted, agent is terminated, or action is None
         if self._battery_level[agent] == 0 or self.terminations[agent] or action is None:
             self.terminations[agent] = True  # Mark the agent as terminated
-
+            
             # Check if all agents are terminated
             if all(self.terminations.values()):
                 terminated = True
                 reward = -100  # Adjust this based on your reward scheme
 
-                observation = self._get_obs(agent)
-                info = self._get_info(agent)
                 return observation, reward, terminated, truncation, info
-
-            return  # If terminated, end the step here without doing anything else
+            
+            # selects the next agent.
+            self.agent_selection = self._agent_selector.next()
+            return observation, reward, terminated, truncation, info # If terminated, end the step here without doing anything else
 
         # Process the action: Determine the new direction and location
         direction = self._action_to_direction[action]
