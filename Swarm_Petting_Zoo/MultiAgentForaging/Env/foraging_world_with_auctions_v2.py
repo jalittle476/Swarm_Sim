@@ -1,7 +1,8 @@
 from foraging_world_v1 import ForagingEnvironment  # Importing your base environment
 import numpy as np
+import random
 
-class ForagingEnvironmentWithAuction(ForagingEnvironment):
+class ForagingEnvironmentWithTransactions(ForagingEnvironment):
     def __init__(self, num_agents, render_mode=None, size=20, seed=255, num_resources=5, fov=5, show_fov=False, show_gridlines=False, draw_numbers=False, record_sim=False, debug = False):
         super().__init__(num_agents, render_mode, size, seed, num_resources, fov, show_fov, show_gridlines, draw_numbers, record_sim)
         self.local_interaction_range = fov  # Set the interaction range equal to FOV
@@ -11,7 +12,7 @@ class ForagingEnvironmentWithAuction(ForagingEnvironment):
 
 
         # Default standard deviations for different behaviors
-        self.std_dev_base_return = 0.9
+        self.std_dev_base_return = 0.8
         self.std_dev_foraging = 0.1
 
     def initialize_agents(self):
@@ -36,8 +37,9 @@ class ForagingEnvironmentWithAuction(ForagingEnvironment):
         adjusted_threshold = min(base_threshold + local_density, max_threshold)
         return adjusted_threshold
 
-    def gaussian_sample(self, direction, std_dev):
+    def gaussian_sample(self, direction, std_dev, no_movement_prob=0.1):
         """Sample a discrete action based on the direction vector with added Gaussian noise."""
+
         # Normalize the direction vector
         norm = np.linalg.norm(direction)
         if norm != 0:
@@ -83,9 +85,9 @@ class ForagingEnvironmentWithAuction(ForagingEnvironment):
             else:
                 direction_to_resource = np.random.normal(0, self.std_dev_foraging, 2)  # Random exploration direction
 
-            # # Avoid base if near and not carrying a resource
-            # if distance_to_base <= base_proximity_threshold:
-            #     direction_to_resource = -self.calculate_direction(agent_location, base_location)  # Direct away from base
+            # Avoid base if near and not carrying a resource
+            if distance_to_base <= base_proximity_threshold:
+                direction_to_resource = -self.calculate_direction(agent_location, base_location)  # Direct away from base
 
             return self.gaussian_sample(direction_to_resource, self.std_dev_foraging)
 
@@ -175,8 +177,6 @@ class ForagingEnvironmentWithAuction(ForagingEnvironment):
         if all(self.terminations.values()):
             print("All agents terminated. Ending the simulation.")
             return new_observation, reward, True, truncation, info
-
-
 
         return new_observation, reward, terminated, truncation, info
 

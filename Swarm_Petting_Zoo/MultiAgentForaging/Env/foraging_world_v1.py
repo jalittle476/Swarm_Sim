@@ -10,7 +10,7 @@ import random
 ## Foraging World Without Communication
 
 class ForagingEnvironment(AECEnv):
-    metadata = {"name": "foraging_environment_v0", "render_fps": 1000}
+    metadata = {"name": "foraging_environment_v0", "render_fps": 100}
 
     def __init__(self, num_agents, render_mode=None, size=20, seed=255, num_resources=5, fov=2, show_fov = False, show_gridlines = False, draw_numbers = False, record_sim = False):
         self.np_random = np.random.default_rng(seed)
@@ -193,7 +193,8 @@ class ForagingEnvironment(AECEnv):
         alternative_directions = [
             np.array([direction[1], direction[0]]),   # Turn right
             np.array([-direction[1], -direction[0]]), # Turn left
-            -direction                                # Move backward
+            -direction,                               # Move backward
+            np.array([0, 0]),                         # Stay in place
         ]
 
         # Shuffle the alternative directions to randomize the choice order
@@ -479,13 +480,13 @@ class ForagingEnvironment(AECEnv):
         self.np_random.shuffle(all_locations)
         
         
-        food_block = {(x,y) for x in range(10) for y in range(10)}
-        food_block_list = list(food_block)
+        # food_block = {(x,y) for x in range(10) for y in range(10)}
+        # food_block_list = list(food_block)
         
         #print(food_block)
-        #return np.array(all_locations[:num_resources])    
+        return np.array(all_locations[:num_resources])    
         
-        return np.array(food_block_list)
+        #return np.array(food_block_list)
 
     # Below are functions related to the foraging aspects of the simulation
 
