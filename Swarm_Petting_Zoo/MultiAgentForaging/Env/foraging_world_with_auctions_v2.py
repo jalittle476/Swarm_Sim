@@ -2,15 +2,16 @@ from foraging_world_v1 import ForagingEnvironment  # Importing your base environ
 import numpy as np
 
 class ForagingEnvironmentWithAuction(ForagingEnvironment):
-    def __init__(self, num_agents, render_mode=None, size=20, seed=255, num_resources=5, fov=5, show_fov=False, show_gridlines=False, draw_numbers=False, record_sim=False):
+    def __init__(self, num_agents, render_mode=None, size=20, seed=255, num_resources=5, fov=5, show_fov=False, show_gridlines=False, draw_numbers=False, record_sim=False, debug = False):
         super().__init__(num_agents, render_mode, size, seed, num_resources, fov, show_fov, show_gridlines, draw_numbers, record_sim)
         self.local_interaction_range = fov  # Set the interaction range equal to FOV
         self.auction_history = []  # To track past auctions if needed
         self.initialize_agents()  # Initialize agent-specific attributes
+        self.debug = debug
 
 
         # Default standard deviations for different behaviors
-        self.std_dev_base_return = 0.5
+        self.std_dev_base_return = 0.9
         self.std_dev_foraging = 0.1
 
     def initialize_agents(self):
@@ -42,7 +43,8 @@ class ForagingEnvironmentWithAuction(ForagingEnvironment):
             direction = direction / norm
         
         sampled_direction = np.random.normal(direction, std_dev)
-        print(f"Original direction: {direction}, Sampled direction: {sampled_direction}")
+        if self.debug:
+            print(f"Original direction: {direction}, Sampled direction: {sampled_direction}")
         
         if abs(sampled_direction[0]) > abs(sampled_direction[1]):
             return 0 if sampled_direction[0] > 0 else 2  # Move right or left
@@ -80,9 +82,9 @@ class ForagingEnvironmentWithAuction(ForagingEnvironment):
             else:
                 direction_to_resource = np.random.normal(0, self.std_dev_foraging, 2)  # Random exploration direction
 
-            # # Avoid base if near and not carrying a resource
-            # if distance_to_base <= base_proximity_threshold:
-            #     direction_to_resource = -self.calculate_direction(agent_location, base_location)  # Direct away from base
+            # Avoid base if near and not carrying a resource
+            if distance_to_base <= base_proximity_threshold:
+                direction_to_resource = -self.calculate_direction(agent_location, base_location)  # Direct away from base
 
             return self.gaussian_sample(direction_to_resource, self.std_dev_foraging)
 
@@ -94,7 +96,7 @@ class ForagingEnvironmentWithAuction(ForagingEnvironment):
         """Decide on an action for the agent based on its state and log the state."""
         observation = self.observe(agent)
         battery_level = observation['battery_level']
-        min_battery_level = 10  # Threshold for returning to base
+        min_battery_level = 20  # Threshold for returning to base
         carrying = self.get_carrying(agent)
 
         # Determine state based on conditions
@@ -115,23 +117,25 @@ class ForagingEnvironmentWithAuction(ForagingEnvironment):
     def check_agent_state(self, agent, observation):
         if observation['battery_level'] <= 0:
             self.terminations[agent] = True
-            print(f"Agent {agent} battery depleted and is now terminated.")
+            if self.debug:
+                print(f"Agent {agent} battery depleted and is now terminated.")
             return True  # Indicate that the agent should be terminated
         return False
 
     def log_agent_state(self, agent, observation, state):
         """Log the agent's state, location, and other important details."""
-        log_msg = (
-            f"----------------------------------------\n"
-            f"Agent {agent} post-step:\n"
-            f"- State: {state}\n"
-            f"- Location: {self.get_agent_location(agent)}\n"
-            f"- Carrying: {self.get_carrying(agent)}\n"
-            f"- Money: {observation['money']}\n"
-            f"- Battery Level: {observation['battery_level']}\n"
-            f"----------------------------------------"
-        )
-        print(log_msg)
+        if self.debug:
+            log_msg = (
+                f"----------------------------------------\n"
+                f"Agent {agent} post-step:\n"
+                f"- State: {state}\n"
+                f"- Location: {self.get_agent_location(agent)}\n"
+                f"- Carrying: {self.get_carrying(agent)}\n"
+                f"- Money: {observation['money']}\n"
+                f"- Battery Level: {observation['battery_level']}\n"
+                f"----------------------------------------"
+            )
+            print(log_msg)
 
     def step(self, action):
         """Extend the step function to handle purchases and auction functionality."""
@@ -145,7 +149,8 @@ class ForagingEnvironmentWithAuction(ForagingEnvironment):
         # Check if the agent has received a reward (i.e., returned a resource)
         if reward > 0:
             self._money[agent] += self._resource_reward
-            print(f"Agent {agent} returned a resource and earned {self._resource_reward} money. Total Money: {self._money[agent]}.")
+            if self.debug:
+                print(f"Agent {agent} returned a resource and earned {self._resource_reward} money. Total Money: {self._money[agent]}.")
 
         # Automatically purchase battery charges with available money if at home base
         if np.array_equal(self.get_agent_location(agent), self.get_home_base_location()):
@@ -158,7 +163,8 @@ class ForagingEnvironmentWithAuction(ForagingEnvironment):
         if self._battery_level[agent] <= 0:
             terminated = True  # Ensure the terminated flag is set
             self.terminations[agent] = True  # Ensure the agent is marked as terminated
-            print(f"Agent {agent} battery depleted and is now terminated.")
+            if self.debug:
+                print(f"Agent {agent} battery depleted and is now terminated.")
             return new_observation, reward, terminated, truncation, info
 
        # Log post-step status for debugging
@@ -177,35 +183,42 @@ class ForagingEnvironmentWithAuction(ForagingEnvironment):
         """Decrement the battery level of an agent."""
         if self._battery_level[agent] > 0:
             self._battery_level[agent] -= self._battery_usage_rate
-            print(f"Agent {agent} used battery charge. Current battery level: {self._battery_level[agent]}")
+            if self.debug:
+                print(f"Agent {agent} used battery charge. Current battery level: {self._battery_level[agent]}")
         if self._battery_level[agent] <= 0:
             self.terminations[agent] = True  # Terminate agent if battery is depleted
-            print(f"Agent {agent} battery depleted and is now terminated.")
+            if self.debug:    
+                print(f"Agent {agent} battery depleted and is now terminated.")
 
     def purchase_battery_charge(self, agent):
         """Purchase battery charge using the agent's money if at the home base, with a cap at full battery charge."""
-        print(f"Agent {agent} - Initial Money: {self._money[agent]}, Initial Battery: {self._battery_level[agent]}")
+        if self.debug:            
+            print(f"Agent {agent} - Initial Money: {self._money[agent]}, Initial Battery: {self._battery_level[agent]}")
         
         while self._money[agent] >= self._battery_charge_cost and self._battery_level[agent] < self.full_battery_charge:
             charge_needed = self.full_battery_charge - self._battery_level[agent]
             charge_to_purchase = min(self._battery_charge_amount, charge_needed)
 
             # Debug: Check values before purchasing
-            print(f"Attempting purchase: Charge Needed: {charge_needed}, Charge to Purchase: {charge_to_purchase}, Current Battery: {self._battery_level[agent]}, Money: {self._money[agent]}")
+            if self.debug:
+                print(f"Attempting purchase: Charge Needed: {charge_needed}, Charge to Purchase: {charge_to_purchase}, Current Battery: {self._battery_level[agent]}, Money: {self._money[agent]}")
             
             # Deduct the cost and increase the battery level
             self._money[agent] -= self._battery_charge_cost
             self._battery_level[agent] += charge_to_purchase
 
             # Debug: Check values after purchasing
-            print(f"Agent {agent} purchased {charge_to_purchase} battery charge for {self._battery_charge_cost} money. Remaining Money: {self._money[agent]}, New Battery Level: {self._battery_level[agent]}")
+            if self.debug:
+                print(f"Agent {agent} purchased {charge_to_purchase} battery charge for {self._battery_charge_cost} money. Remaining Money: {self._money[agent]}, New Battery Level: {self._battery_level[agent]}")
 
             if self._battery_level[agent] >= self.full_battery_charge:
                 self._battery_level[agent] = self.full_battery_charge  # Ensure it doesn't exceed the max
-                print(f"Agent {agent} has reached full battery capacity: {self._battery_level[agent]}.")
+                if self.debug:
+                    print(f"Agent {agent} has reached full battery capacity: {self._battery_level[agent]}.")
                 break
 
-        print(f"Agent {agent} - Final Money: {self._money[agent]}, Final Battery: {self._battery_level[agent]}")
+        if self.debug:
+            print(f"Agent {agent} - Final Money: {self._money[agent]}, Final Battery: {self._battery_level[agent]}")
 
     def observe(self, agent):
         """Extend observation to include nearby agents' ID and position."""

@@ -3,7 +3,7 @@ import time
 
 def test_subclass_features(step_limit=5):
     # Initialize the environment with the auction subclass
-    env = ForagingEnvironmentWithAuction(num_agents=2, size=20, num_resources=5, fov=5, render_mode="human")
+    env = ForagingEnvironmentWithAuction(num_agents=20, size=20, num_resources=5, fov=2, render_mode="human")
     env.reset(seed=42)
 
     for agent in env.agent_iter():
@@ -17,8 +17,8 @@ def test_subclass_features(step_limit=5):
             action = None
         
         # Decide and execute the action
-        #action = env.decide_action(agent)
-        action = env.action_space.sample()
+        action = env.decide_action(agent)
+        #action = env.action_space.sample()
         env.step(action)
      
         
