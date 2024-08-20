@@ -20,6 +20,7 @@ class ForagingEnvironmentWithAuction(ForagingEnvironment):
         self._battery_usage_rate = 1
         self._battery_charge_cost = 10
         self._battery_charge_amount = 10
+        self._min_battery_level = 20
         
         # Initialize the state of each agent
         self.agent_states = {agent: "Foraging" for agent in self.agents}  # Default state is "Foraging"
@@ -51,9 +52,9 @@ class ForagingEnvironmentWithAuction(ForagingEnvironment):
         else:
             return 1 if sampled_direction[1] > 0 else 3  # Move down or up
 
-    def should_return_to_base(self, battery_level, min_battery_level):
+    def should_return_to_base(self, battery_level, _min_battery_level_level):
         """Check if the agent should return to the base based on its battery level."""
-        return battery_level <= min_battery_level
+        return battery_level <= _min_battery_level_level
 
     def return_to_base(self, agent_location, base_location):
         """Generate an action to return the agent to the base."""
@@ -82,9 +83,9 @@ class ForagingEnvironmentWithAuction(ForagingEnvironment):
             else:
                 direction_to_resource = np.random.normal(0, self.std_dev_foraging, 2)  # Random exploration direction
 
-            # Avoid base if near and not carrying a resource
-            if distance_to_base <= base_proximity_threshold:
-                direction_to_resource = -self.calculate_direction(agent_location, base_location)  # Direct away from base
+            # # Avoid base if near and not carrying a resource
+            # if distance_to_base <= base_proximity_threshold:
+            #     direction_to_resource = -self.calculate_direction(agent_location, base_location)  # Direct away from base
 
             return self.gaussian_sample(direction_to_resource, self.std_dev_foraging)
 
@@ -96,11 +97,11 @@ class ForagingEnvironmentWithAuction(ForagingEnvironment):
         """Decide on an action for the agent based on its state and log the state."""
         observation = self.observe(agent)
         battery_level = observation['battery_level']
-        min_battery_level = 20  # Threshold for returning to base
+        _min_battery_level_level = 20  # Threshold for returning to base
         carrying = self.get_carrying(agent)
 
         # Determine state based on conditions
-        if carrying or self.should_return_to_base(battery_level, min_battery_level):
+        if carrying or self.should_return_to_base(battery_level, _min_battery_level_level):
             state = "Returning to Base"
             action = self.return_to_base(self.get_agent_location(agent), self.get_home_base_location())
             if action is not None:

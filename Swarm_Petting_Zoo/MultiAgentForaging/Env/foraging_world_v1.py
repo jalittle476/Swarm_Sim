@@ -5,6 +5,7 @@ from pettingzoo.utils import agent_selector
 from gym import spaces
 import numpy as np
 import pygame
+import random 
 
 ## Foraging World Without Communication
 
@@ -194,6 +195,9 @@ class ForagingEnvironment(AECEnv):
             np.array([-direction[1], -direction[0]]), # Turn left
             -direction                                # Move backward
         ]
+
+        # Shuffle the alternative directions to randomize the choice order
+        random.shuffle(alternative_directions)
 
         for alt_dir in alternative_directions:
             new_location = self._agent_locations[agent] + alt_dir
