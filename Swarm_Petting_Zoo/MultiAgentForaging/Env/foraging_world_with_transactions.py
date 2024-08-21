@@ -22,6 +22,7 @@ class ForagingEnvironmentWithTransactions(ForagingEnvironment):
         self._battery_charge_cost = 10
         self._battery_charge_amount = 10
         self._min_battery_level = 20
+        self._battery_recharge_threshold = 0.5
         
         # Initialize the state of each agent
         self.agent_states = {agent: "Foraging" for agent in self.agents}  # Default state is "Foraging"
@@ -155,9 +156,11 @@ class ForagingEnvironmentWithTransactions(ForagingEnvironment):
             if self.debug:
                 print(f"Agent {agent} returned a resource and earned {self._resource_reward} money. Total Money: {self._money[agent]}.")
 
-        # Automatically purchase battery charges with available money if at home base
-        if np.array_equal(self.get_agent_location(agent), self.get_home_base_location()):
-            self.purchase_battery_charge(agent)
+        # Battery threshold for recharging
+        if self._battery_level[agent] < self.full_battery_charge * self._battery_recharge_threshold:  # Only recharge if below 50%
+            # Automatically purchase battery charges with available money if at home base
+            if np.array_equal(self.get_agent_location(agent), self.get_home_base_location()):
+                self.purchase_battery_charge(agent)
 
         # Ensure all observations and updates are consistent
         new_observation = self.observe(agent)

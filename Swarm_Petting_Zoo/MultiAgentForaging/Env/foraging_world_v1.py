@@ -49,6 +49,7 @@ class ForagingEnvironment(AECEnv):
         self.action_space = spaces.Discrete(4)
 
         self._action_to_direction = {
+            None: np.array([0, 0]),
             0: np.array([1, 0]),
             1: np.array([0, 1]),
             2: np.array([-1, 0]),
@@ -85,9 +86,6 @@ class ForagingEnvironment(AECEnv):
         self._battery_level = {agent: self.full_battery_charge for agent in self.possible_agents}
 
         # Set the initial agent selection
-        #self.agent_selection = self.possible_agents[0]
-        
-        #self.agents = self.possible_agents.copy()
         
         self.agents = self.possible_agents[:]
         self.rewards = {agent: 0 for agent in self.agents}
@@ -98,9 +96,6 @@ class ForagingEnvironment(AECEnv):
         
         self._agent_selector = agent_selector(self.agents)
         self.agent_selection = self._agent_selector.next()
-
-        # Return observation for the first agent and general info
-        #return self._get_obs(self.agent_selection), self._get_info(self.agent_selection)
 
 
     def step(self, action):
@@ -113,8 +108,8 @@ class ForagingEnvironment(AECEnv):
         observation = self.observe(agent)
         info = self._get_info(agent)
 
-        # Handle cases where the agent's battery is depleted, agent is terminated, or action is None
-        if self._battery_level[agent] == 0 or self.terminations[agent] or action is None:
+        # Handle cases where the agent's battery is depleted, agent is terminated
+        if self._battery_level[agent] == 0:
             self.terminations[agent] = True  # Mark the agent as terminated
             
             # Check if all agents are terminated
@@ -173,12 +168,6 @@ class ForagingEnvironment(AECEnv):
         # Check if the location is the home base
         if np.array_equal(location, self._home_base_location):
             return True  # The home base can hold any number of agents
-
-        # If the agent is carrying a resource, check if the location is occupied by another resource
-        # if self._carrying[agent]:
-        #     for resource_location in self._resources_location:
-        #         if np.array_equal(location, resource_location):
-        #             return False  # Location is occupied by a resource
 
         # For other locations, check if they are occupied by an agent
         for other_agent, agent_location in self._agent_locations.items():

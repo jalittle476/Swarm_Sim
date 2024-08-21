@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import random
 import warnings
 
@@ -9,10 +11,15 @@ from pettingzoo.utils.conversions import (
     parallel_to_aec_wrapper,
     turn_based_aec_to_parallel_wrapper,
 )
+from pettingzoo.utils.env import ActionType, AgentID, ObsType, ParallelEnv
 from pettingzoo.utils.wrappers import BaseWrapper
 
 
-def sample_action(env, obs, agent):
+def sample_action(
+    env: ParallelEnv[AgentID, ObsType, ActionType],
+    obs: dict[AgentID, ObsType],
+    agent: AgentID,
+) -> ActionType:
     agent_obs = obs[agent]
     if isinstance(agent_obs, dict) and "action_mask" in agent_obs:
         legal_actions = np.flatnonzero(agent_obs["action_mask"])
@@ -22,7 +29,7 @@ def sample_action(env, obs, agent):
     return env.action_space(agent).sample()
 
 
-def parallel_api_test(par_env, num_cycles=1000):
+def parallel_api_test(par_env: ParallelEnv, num_cycles=1000):
     par_env.max_cycles = num_cycles
 
     if not hasattr(par_env, "possible_agents"):
@@ -39,8 +46,12 @@ def parallel_api_test(par_env, num_cycles=1000):
     MAX_RESETS = 2
     for _ in range(MAX_RESETS):
         obs, infos = par_env.reset()
+
         assert isinstance(obs, dict)
-        assert set(obs.keys()) == (set(par_env.agents))
+        assert isinstance(infos, dict)
+        # Note: obs and info dicts must contain all AgentIDs, but can also have other additional keys (e.g., "common")
+        assert set(par_env.agents).issubset(set(obs.keys()))
+        assert set(par_env.agents).issubset(set(infos.keys()))
         terminated = {agent: False for agent in par_env.agents}
         truncated = {agent: False for agent in par_env.agents}
         live_agents = set(par_env.agents[:])
@@ -67,14 +78,13 @@ def parallel_api_test(par_env, num_cycles=1000):
             assert isinstance(truncated, dict)
             assert isinstance(info, dict)
 
-            agents_set = set(live_agents)
             keys = "observation reward terminated truncated info".split()
             vals = [obs, rew, terminated, truncated, info]
             for k, v in zip(keys, vals):
                 key_set = set(v.keys())
-                if key_set == agents_set:
+                if key_set == live_agents:
                     continue
-                if len(key_set) < len(agents_set):
+                if len(key_set) < len(live_agents):
                     warnings.warn(f"Live agent was not given {k}")
                 else:
                     warnings.warn(f"Agent was given {k} but was dead last turn")
@@ -86,11 +96,8 @@ def parallel_api_test(par_env, num_cycles=1000):
 
                 has_finished |= {
                     agent
-                    for agent, d in [
-                        (x[0], x[1] or y[1])
-                        for x, y in zip(terminated.items(), truncated.items())
-                    ]
-                    if d
+                    for agent in live_agents
+                    if terminated[agent] or truncated[agent]
                 }
                 if not par_env.agents and has_finished != set(par_env.possible_agents):
                     warnings.warn(
@@ -107,12 +114,10 @@ def parallel_api_test(par_env, num_cycles=1000):
                     agent
                 ), "action_space should return the exact same space object (not a copy) for an agent (ensures that action space seeding works as expected). Consider decorating your action_space(self, agent) method with @functools.lru_cache(maxsize=None)"
 
-            for agent, d in [
-                (x[0], x[1] or y[1])
-                for x, y in zip(terminated.items(), truncated.items())
-            ]:
-                if d:
-                    live_agents.remove(agent)
+            agents_to_remove = {
+                agent for agent in live_agents if terminated[agent] or truncated[agent]
+            }
+            live_agents -= agents_to_remove
 
             assert (
                 set(par_env.agents) == live_agents
@@ -120,3 +125,4 @@ def parallel_api_test(par_env, num_cycles=1000):
 
             if len(live_agents) == 0:
                 break
+    print("Passed Parallel API test")
