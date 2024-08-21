@@ -21,7 +21,7 @@ class ForagingEnvironmentWithTransactions(ForagingEnvironment):
         self._battery_usage_rate = 1
         self._battery_charge_cost = 10
         self._battery_charge_amount = 10
-        self._min_battery_level = 20
+        self._min_battery_level = 5
         self._battery_recharge_threshold = 0.5
         
         # Initialize the state of each agent
@@ -145,7 +145,10 @@ class ForagingEnvironmentWithTransactions(ForagingEnvironment):
         """Extend the step function to handle purchases and auction functionality."""
         # Call the base class's step function to maintain existing functionality
         agent = self.agent_selection  # Get the current agent
-        _, reward, terminated, truncation, info = super().step(action)
+        observation, reward, terminated, truncation, info = super().step(action)
+
+        if terminated or truncation:
+            return observation, reward, terminated, truncation, info
 
         # Decrement battery after each step
         self._decrement_battery(agent)
@@ -165,22 +168,6 @@ class ForagingEnvironmentWithTransactions(ForagingEnvironment):
         # Ensure all observations and updates are consistent
         new_observation = self.observe(agent)
         
-        # Check if the agent is terminated due to battery depletion
-        if self._battery_level[agent] <= 0:
-            terminated = True  # Ensure the terminated flag is set
-            self.terminations[agent] = True  # Ensure the agent is marked as terminated
-            if self.debug:
-                print(f"Agent {agent} battery depleted and is now terminated.")
-            return new_observation, reward, terminated, truncation, info
-
-       # Log post-step status for debugging
-       #self.log_agent_state(agent, new_observation,self.agent_states[agent])
-
-        # Advance to the next agent or end the episode if all agents are terminated
-        if all(self.terminations.values()):
-            print("All agents terminated. Ending the simulation.")
-            return new_observation, reward, True, truncation, info
-
         return new_observation, reward, terminated, truncation, info
 
     def _decrement_battery(self, agent):
@@ -189,10 +176,10 @@ class ForagingEnvironmentWithTransactions(ForagingEnvironment):
             self._battery_level[agent] -= self._battery_usage_rate
             if self.debug:
                 print(f"Agent {agent} used battery charge. Current battery level: {self._battery_level[agent]}")
-        if self._battery_level[agent] <= 0:
-            self.terminations[agent] = True  # Terminate agent if battery is depleted
-            if self.debug:    
-                print(f"Agent {agent} battery depleted and is now terminated.")
+        # if self._battery_level[agent] <= 0:
+        #     self.terminations[agent] = True  # Terminate agent if battery is depleted
+        #     if self.debug:    
+        #         print(f"Agent {agent} battery depleted and is now terminated.")
 
     def purchase_battery_charge(self, agent):
         """Purchase battery charge using the agent's money if at the home base, with a cap at full battery charge."""

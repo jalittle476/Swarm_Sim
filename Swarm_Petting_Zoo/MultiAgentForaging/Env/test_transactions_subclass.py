@@ -10,9 +10,6 @@ def test_subclass_features(step_limit=5):
 
         observation, reward, termination, truncation, info = env.last(agent)
 
-        # Print the step count header before any actions are taken
-        #print(f"\n=== Step {step_count + 1} ===")  # Enhanced step count header
-
         if termination or truncation:
             action = None
         else:

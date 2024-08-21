@@ -10,7 +10,7 @@ import random
 ## Foraging World Without Communication
 
 class ForagingEnvironment(AECEnv):
-    metadata = {"name": "foraging_environment_v0", "render_fps": 100}
+    metadata = {"name": "foraging_environment_v0", "render_fps": 1000}
 
     def __init__(self, num_agents, render_mode=None, size=20, seed=255, num_resources=5, fov=2, show_fov = False, show_gridlines = False, draw_numbers = False, record_sim = False):
         self.np_random = np.random.default_rng(seed)
@@ -31,6 +31,9 @@ class ForagingEnvironment(AECEnv):
         self.window = None
         self.clock = None
         self.window_size = 1024  # The size of the PyGame window
+        
+        # Initialize the grid
+        self.grid = np.zeros((self.size, self.size), dtype=int)
         
         # Initialize the possible agents
         self.possible_agents = [f"agent_{i}" for i in range(num_agents)]
@@ -67,22 +70,27 @@ class ForagingEnvironment(AECEnv):
 
 
     def reset(self, seed=None, options=None):
-        # If you're extending another class, call its reset method (if needed)
-        #super().reset(seed=seed)
-        # self.active_agents = set(self.possible_agents)
+         # Reset the grid
+        self.grid.fill(0)
         
-        # Home base is at the center of the grid
+         # Home base is at the center of the grid
         self._home_base_location = np.array([self.size // 2, self.size // 2])
+        self.grid[self._home_base_location[0], self._home_base_location[1]] = -1  # Mark the home base
         
-        # Initialize agent locations, ensuring they don't overlap with home base
-        self._agent_locations = {agent: self._home_base_location + np.array([1, 0]) for agent in self.possible_agents}
+       # Initialize agent locations and update the grid
+        self._agent_locations = {}
+        for agent in self.possible_agents:
+            self._agent_locations[agent] = self._home_base_location + np.array([1, 0])
+            self.grid[self._agent_locations[agent][0], self._agent_locations[agent][1]] = 1  # Mark the agent
 
-        # Resources are generated randomly, ensuring they don't overlap with agents or home base
+
+        # Generate resources and update the grid
         self._resources_location = self._generate_resources(self.num_resources)
+        for resource_location in self._resources_location:
+            self.grid[resource_location[0], resource_location[1]] = 2  # Mark the resource
 
         # Reset carrying status and battery level for each agent
         self._carrying = {agent: False for agent in self.possible_agents}
-        
         self._battery_level = {agent: self.full_battery_charge for agent in self.possible_agents}
 
         # Set the initial agent selection
@@ -110,6 +118,7 @@ class ForagingEnvironment(AECEnv):
 
         # Handle cases where the agent's battery is depleted, agent is terminated
         if self._battery_level[agent] == 0:
+            terminated = True  # Mark the agent as terminated
             self.terminations[agent] = True  # Mark the agent as terminated
             
             # Check if all agents are terminated
@@ -130,8 +139,19 @@ class ForagingEnvironment(AECEnv):
         # Validate the new location and possibly avoid collisions
         if not self._is_location_valid(agent, new_location):
             new_location = self._simple_avoidance(agent, direction)
-        
+            
+             # Update the grid: remove the agent from the old location
+        self.grid[self._agent_locations[agent][0], self._agent_locations[agent][1]] = 0
         self._agent_locations[agent] = np.clip(new_location, 0, self.size - 1)
+        self.grid[self._agent_locations[agent][0], self._agent_locations[agent][1]] = 1  # Mark the new location
+        
+        # Handle resource collection if the agent is on a resource location
+        for i in range(len(self._resources_location)):
+            if np.array_equal(self._agent_locations[agent], self._resources_location[i]) and not self._carrying[agent]:
+                self._carrying[agent] = True
+                self.grid[self._resources_location[i][0], self._resources_location[i][1]] = 0  # Remove resource from grid
+                self._resources_location = np.delete(self._resources_location, i, axis=0)
+                break
 
         # Handle resource collection if the agent is on a resource location
         for i in range(len(self._resources_location)):
@@ -148,15 +168,13 @@ class ForagingEnvironment(AECEnv):
         # If no resources remain, terminate the environment
         if len(self._resources_location) == 0 and not any(self._carrying.values()):
             terminated = True
+            self.terminations = {agent: True for agent in self.agents}   
 
         observation = self.observe(agent)
         info = self._get_info(agent)
         
         # selects the next agent.
         self.agent_selection = self._agent_selector.next()
-
-        if all(self.terminations.values()):
-            terminated = True
             
         if self.render_mode == "human":
             self._render()
