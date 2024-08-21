@@ -140,15 +140,7 @@ class ForagingEnvironmentWithTransactions(ForagingEnvironment):
 
         self.log_agent_state(agent, observation, state)
         return action
-
-    def check_agent_state(self, agent, observation):
-        if observation['battery_level'] <= 0:
-            self.terminations[agent] = True
-            if self.debug:
-                print(f"Agent {agent} battery depleted and is now terminated.")
-            return True  # Indicate that the agent should be terminated
-        return False
-
+    
     def log_agent_state(self, agent, observation, state):
         """Log the agent's state, location, and other important details."""
         if self.debug:
