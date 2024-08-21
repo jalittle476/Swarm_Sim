@@ -41,15 +41,23 @@ class ForagingEnvironmentWithTransactions(ForagingEnvironment):
     def gaussian_sample(self, direction, std_dev, no_movement_prob=0.1):
         """Sample a discrete action based on the direction vector with added Gaussian noise."""
 
+        # Introduce a probability for no movement
+        if np.random.random() < no_movement_prob:
+            if self.debug:
+                print(f"Agent chooses not to move. (No movement with probability {no_movement_prob})")
+            return None  # No movement action (could return a specific "no movement" code if needed)
+
         # Normalize the direction vector
         norm = np.linalg.norm(direction)
         if norm != 0:
             direction = direction / norm
         
+        # Apply Gaussian noise to the direction
         sampled_direction = np.random.normal(direction, std_dev)
         if self.debug:
             print(f"Original direction: {direction}, Sampled direction: {sampled_direction}")
         
+        # Determine the action based on the sampled direction
         if abs(sampled_direction[0]) > abs(sampled_direction[1]):
             return 0 if sampled_direction[0] > 0 else 2  # Move right or left
         else:
@@ -57,14 +65,22 @@ class ForagingEnvironmentWithTransactions(ForagingEnvironment):
 
     def should_return_to_base(self, battery_level, _min_battery_level_level):
         """Check if the agent should return to the base based on its battery level."""
-        return battery_level <= _min_battery_level_level
+        return battery_level <= self._min_battery_level
 
     def return_to_base(self, agent_location, base_location):
         """Generate an action to return the agent to the base."""
         if np.array_equal(agent_location, base_location):
             return None  # No action needed, agent is already at the base
         direction_to_base = self.calculate_direction(agent_location, base_location)
-        return self.gaussian_sample(direction_to_base, self.std_dev_base_return)
+        action = self.gaussian_sample(direction_to_base, self.std_dev_base_return)
+        
+        # Handle the case where the agent might choose not to move
+        if action is None:
+            if self.debug:
+                print(f"Agent at {agent_location} chose not to move towards base at {base_location}.")
+            return None
+        
+        return action
 
     def foraging_behavior(self, agent, observation):
         """Determine the agent's action based on its state and environment."""
@@ -72,25 +88,32 @@ class ForagingEnvironmentWithTransactions(ForagingEnvironment):
         visible_resources = observation["resources"]
         agent_location = observation["agent_location"]
         base_location = observation["home_base"]
-       # Dynamically adjust the base proximity threshold to avoid base if not carrying
-        base_proximity_threshold = self.adjust_base_proximity_threshold(agent)
 
-        distance_to_base = np.linalg.norm(self.calculate_direction(agent_location, base_location))
+        # # Dynamically adjust the base proximity threshold to avoid base if not carrying
+        # base_proximity_threshold = self.adjust_base_proximity_threshold(agent)
+
+        # # Calculate the distance to the base
+        # distance_to_base = self.manhattan_distance(agent_location, base_location)
 
         if carrying:
+            # If carrying a resource, return to base
             return self.return_to_base(agent_location, base_location)
         else:
             if visible_resources:
+                # If resources are visible, move towards the nearest one
                 nearest_resource = min(visible_resources, key=lambda r: self.manhattan_distance(agent_location, r))
                 direction_to_resource = self.calculate_direction(agent_location, nearest_resource)
             else:
+                # If no resources are visible, explore randomly
                 direction_to_resource = np.random.normal(0, self.std_dev_foraging, 2)  # Random exploration direction
 
-            # Avoid base if near and not carrying a resource
-            if distance_to_base <= base_proximity_threshold:
-                direction_to_resource = -self.calculate_direction(agent_location, base_location)  # Direct away from base
+            # # Avoid the base if near and not carrying a resource
+            # if distance_to_base <= base_proximity_threshold:
+            #     direction_to_resource = -self.calculate_direction(agent_location, base_location)  # Direct away from base
 
+            # Sample the direction with added Gaussian noise for imperfect localization
             return self.gaussian_sample(direction_to_resource, self.std_dev_foraging)
+
 
     def manhattan_distance(self, a, b):
         """Calculate the Manhattan distance between two points."""
@@ -176,10 +199,6 @@ class ForagingEnvironmentWithTransactions(ForagingEnvironment):
             self._battery_level[agent] -= self._battery_usage_rate
             if self.debug:
                 print(f"Agent {agent} used battery charge. Current battery level: {self._battery_level[agent]}")
-        # if self._battery_level[agent] <= 0:
-        #     self.terminations[agent] = True  # Terminate agent if battery is depleted
-        #     if self.debug:    
-        #         print(f"Agent {agent} battery depleted and is now terminated.")
 
     def purchase_battery_charge(self, agent):
         """Purchase battery charge using the agent's money if at the home base, with a cap at full battery charge."""
@@ -235,25 +254,50 @@ class ForagingEnvironmentWithTransactions(ForagingEnvironment):
         
         return observation
 
+    # def get_nearby_agents(self, agent):
+    #     """Detect agents within the local interaction range (FOV)."""
+    #     nearby_agents = []
+    #     agent_pos = self.get_agent_location(agent)
+    #     for other_agent in self.agents:
+    #         if other_agent != agent:
+    #             other_agent_pos = self.get_agent_location(other_agent)
+    #             if self.is_in_local_range(agent_pos, other_agent_pos):
+    #                 nearby_agents.append(other_agent)
+    #     return nearby_agents
+    
     def get_nearby_agents(self, agent):
-        """Detect agents within the local interaction range (FOV)."""
         nearby_agents = []
         agent_pos = self.get_agent_location(agent)
-        for other_agent in self.agents:
-            if other_agent != agent:
-                other_agent_pos = self.get_agent_location(other_agent)
-                if self.is_in_local_range(agent_pos, other_agent_pos):
-                    nearby_agents.append(other_agent)
+        
+        # Get FOV corners
+        tl_y, tl_x, br_y, br_x = self.get_fov_corners(agent_pos, self.fov)
+
+        # Iterate through the grid slice and find nearby agents
+        for y in range(tl_y, br_y):
+            for x in range(tl_x, br_x):
+                for other_agent, other_agent_pos in self._agent_locations.items():
+                    if other_agent != agent and np.array_equal(other_agent_pos, [y, x]):
+                        nearby_agents.append(other_agent)
+
         return nearby_agents
 
-    def is_in_local_range(self, agent_pos, other_agent_pos):
-        """Check if another agent is within the local interaction range."""
-        distance = self.calculate_distance(agent_pos, other_agent_pos)
-        return distance <= self.local_interaction_range
 
-    def calculate_distance(self, pos1, pos2):
-        """Calculate the Euclidean distance between two positions."""
-        return np.linalg.norm(np.array(pos1) - np.array(pos2))
+    # def is_in_local_range(self, agent_pos, other_agent_pos):
+    #     """Check if another agent is within the local interaction range."""
+    #     distance = self.calculate_distance(agent_pos, other_agent_pos)
+    #     return distance <= self.local_interaction_range
+
+    # def calculate_distance(self, pos1, pos2):
+    #     """Calculate the Euclidean distance between two positions."""
+    #     return np.linalg.norm(np.array(pos1) - np.array(pos2))
+    
+    def is_in_local_range(self, agent_pos, other_agent_pos):
+        """Check if another agent is within the local interaction range (FOV) using grid-based lookup."""
+        tl_y, tl_x, br_y, br_x = self.get_fov_corners(agent_pos, self.local_interaction_range)
+
+        # Check if the other agent's position falls within the FOV boundaries
+        return tl_y <= other_agent_pos[0] < br_y and tl_x <= other_agent_pos[1] < br_x
+
 
     def render(self, mode="human"):
         """Call the existing _render method to avoid NotImplementedError."""
@@ -263,16 +307,33 @@ class ForagingEnvironmentWithTransactions(ForagingEnvironment):
         """Retrieve the money of an agent."""
         return self._money[agent]  # Adjust this based on your actual implementation
 
+    # def calculate_local_density(self, agent):
+    #     """Calculate the number of agents within a local interaction range."""
+    #     agent_location = self.get_agent_location(agent)
+    #     local_density = 0
+        
+    #     for other_agent in self.agents:
+    #         if other_agent != agent:  # Don't count the agent itself
+    #             other_agent_location = self.get_agent_location(other_agent)
+    #             distance_to_other_agent = np.linalg.norm(self.calculate_direction(agent_location, other_agent_location))
+    #             if distance_to_other_agent <= self.local_interaction_range:
+    #                 local_density += 1
+        
+    #     return local_density
+    
     def calculate_local_density(self, agent):
-        """Calculate the number of agents within a local interaction range."""
+        """Calculate the number of agents within a local interaction range using grid-based lookup."""
         agent_location = self.get_agent_location(agent)
         local_density = 0
-        
-        for other_agent in self.agents:
-            if other_agent != agent:  # Don't count the agent itself
-                other_agent_location = self.get_agent_location(other_agent)
-                distance_to_other_agent = np.linalg.norm(self.calculate_direction(agent_location, other_agent_location))
-                if distance_to_other_agent <= self.local_interaction_range:
-                    local_density += 1
-        
+
+        # Get FOV corners for the agent
+        tl_y, tl_x, br_y, br_x = self.get_fov_corners(agent_location, self.local_interaction_range)
+
+        # Iterate through the grid slice to count nearby agents
+        for y in range(tl_y, br_y):
+            for x in range(tl_x, br_x):
+                for other_agent, other_agent_location in self._agent_locations.items():
+                    if other_agent != agent and np.array_equal(other_agent_location, [y, x]):
+                        local_density += 1
+
         return local_density

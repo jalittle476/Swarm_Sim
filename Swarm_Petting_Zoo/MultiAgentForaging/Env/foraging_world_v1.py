@@ -140,7 +140,7 @@ class ForagingEnvironment(AECEnv):
         if not self._is_location_valid(agent, new_location):
             new_location = self._simple_avoidance(agent, direction)
             
-             # Update the grid: remove the agent from the old location
+        # Update the grid: remove the agent from the old location
         self.grid[self._agent_locations[agent][0], self._agent_locations[agent][1]] = 0
         self._agent_locations[agent] = np.clip(new_location, 0, self.size - 1)
         self.grid[self._agent_locations[agent][0], self._agent_locations[agent][1]] = 1  # Mark the new location
@@ -150,13 +150,6 @@ class ForagingEnvironment(AECEnv):
             if np.array_equal(self._agent_locations[agent], self._resources_location[i]) and not self._carrying[agent]:
                 self._carrying[agent] = True
                 self.grid[self._resources_location[i][0], self._resources_location[i][1]] = 0  # Remove resource from grid
-                self._resources_location = np.delete(self._resources_location, i, axis=0)
-                break
-
-        # Handle resource collection if the agent is on a resource location
-        for i in range(len(self._resources_location)):
-            if np.array_equal(self._agent_locations[agent], self._resources_location[i]) and not self._carrying[agent]:
-                self._carrying[agent] = True
                 self._resources_location = np.delete(self._resources_location, i, axis=0)
                 break
 
@@ -213,22 +206,6 @@ class ForagingEnvironment(AECEnv):
                 return new_location
 
         return self._agent_locations[agent]  # Stay in place if no valid move is found
-
-    def _update_agent_selection(self):
-        current_idx = self.agents.index(self.agent_selection)
-        next_idx = (current_idx + 1) % len(self.agents)
-
-        # Loop through the agents starting from the next index, looking for the next non-terminated agent
-        for i in range(len(self.agents)):
-            candidate_idx = (next_idx + i) % len(self.agents)
-            candidate_agent = self.agents[candidate_idx]
-
-            if not self.terminations[candidate_agent]:
-                self.agent_selection = candidate_agent
-                return
-
-        # If all agents are terminated, you can handle it as you see fit (e.g., set agent_selection to None)
-        self.agent_selection = None
 
     def _render(self):
         
@@ -431,28 +408,32 @@ class ForagingEnvironment(AECEnv):
 
 
     def _get_obs(self, agent):
-        # Define the agent's field of view (FOV)
-        fov = self.fov
 
-        # Get the coordinates of the top-left and bottom-right corners of the FOV
-        tl_y = max(0, self._agent_locations[agent][0] - fov)
-        tl_x = max(0, self._agent_locations[agent][1] - fov)
-        br_y = min(self.size, self._agent_locations[agent][0] + fov + 1)
-        br_x = min(self.size, self._agent_locations[agent][1] + fov + 1)
+        # Get the agent's current location
+        agent_location = self._agent_locations[agent]
 
-        # Check each resource
-        visible_resources = []
-        for resource_location in self._resources_location:
-            # If the resource is within the FOV, add it to the list of visible resources
-            if tl_y <= resource_location[0] < br_y and tl_x <= resource_location[1] < br_x:
-                visible_resources.append(resource_location)
+        # Get the FOV corners
+        tl_y, tl_x, br_y, br_x = self.get_fov_corners(agent_location, self.fov)
 
-        return {
+        # Slice the grid to get the agent's FOV
+        fov_slice = self.grid[tl_y:br_y, tl_x:br_x]
+
+        # Convert the grid slice into a list of resource locations within the FOV
+        visible_resources = np.argwhere(fov_slice == 2)
+
+        # Adjust resource coordinates relative to the agent's FOV
+        visible_resources = [
+            (y + tl_y, x + tl_x) for y, x in visible_resources
+        ]
+
+        observation = {
             "agent_location": self._agent_locations[agent],
             "home_base": self._home_base_location,
             "resources": visible_resources,
             "battery_level": self._battery_level[agent]
         }
+        
+        return observation
 
     def _get_info(self, agent):
         return {
@@ -472,28 +453,46 @@ class ForagingEnvironment(AECEnv):
             pygame.display.quit()
             pygame.quit()
 
+    # def _generate_resources(self, num_resources):
+    #     # Generate a list of all locations
+    #     all_locations = {(x, y) for x in range(self.size) for y in range(self.size)}
+
+    #     # Remove agent locations and the home base location
+    #     for agent_location in self._agent_locations.values():
+    #         all_locations.discard(tuple(agent_location))
+        
+    #     all_locations.discard(tuple(self._home_base_location))
+
+    #     # Convert to a list and shuffle the remaining locations
+    #     all_locations = list(all_locations)
+    #     self.np_random.shuffle(all_locations)
+        
+        
+    #     #print(food_block)
+    #     return np.array(all_locations[:num_resources])    
+    
     def _generate_resources(self, num_resources):
-        # Generate a list of all locations
+        """Generate resource locations on the grid, avoiding agent locations and the home base."""
+        # Generate a set of all possible locations on the grid
         all_locations = {(x, y) for x in range(self.size) for y in range(self.size)}
 
-        # Remove agent locations and the home base location
-        for agent_location in self._agent_locations.values():
-            all_locations.discard(tuple(agent_location))
-        
-        all_locations.discard(tuple(self._home_base_location))
+        # Exclude agent locations and the home base location
+        excluded_locations = set(tuple(loc) for loc in self._agent_locations.values())
+        excluded_locations.add(tuple(self._home_base_location))
 
-        # Convert to a list and shuffle the remaining locations
-        all_locations = list(all_locations)
-        self.np_random.shuffle(all_locations)
+        # Get available locations by subtracting the excluded ones
+        available_locations = list(all_locations - excluded_locations)
+
+        # Shuffle available locations to randomize resource placement
+        self.np_random.shuffle(available_locations)
+
+        # Select the desired number of resource locations
+        selected_resource_locations = np.array(available_locations[:num_resources])
+
+        return selected_resource_locations
+
         
         
-        # food_block = {(x,y) for x in range(10) for y in range(10)}
-        # food_block_list = list(food_block)
-        
-        #print(food_block)
-        return np.array(all_locations[:num_resources])    
-        
-        #return np.array(food_block_list)
 
     # Below are functions related to the foraging aspects of the simulation
 
@@ -529,3 +528,24 @@ class ForagingEnvironment(AECEnv):
                         awareness.append('empty')
 
         return awareness
+
+    def get_fov_corners(self, location, fov):
+        """
+        Calculate the top-left and bottom-right corners of the FOV centered around a given location.
+
+        Parameters:
+        - location: The (y, x) coordinates of the center location (e.g., the agent's location).
+        - fov: The radius of the field of view.
+
+        Returns:
+        - (tl_y, tl_x, br_y, br_x): The coordinates of the top-left and bottom-right corners of the FOV.
+        """
+        # Get the coordinates of the top-left corner of the FOV
+        tl_y = max(0, location[0] - fov)
+        tl_x = max(0, location[1] - fov)
+        
+        # Get the coordinates of the bottom-right corner of the FOV
+        br_y = min(self.size, location[0] + fov + 1)
+        br_x = min(self.size, location[1] + fov + 1)
+        
+        return tl_y, tl_x, br_y, br_x
