@@ -1,28 +1,29 @@
 from foraging_world_v1 import ForagingEnvironment  # Importing your base environment
 import numpy as np
 import random
+from foraging_config import ForagingConfig
 
 class ForagingEnvironmentWithTransactions(ForagingEnvironment):
-    def __init__(self, num_agents, render_mode=None, size=20, seed=255, num_resources=5, fov=5, show_fov=False, show_gridlines=False, draw_numbers=False, record_sim=False, debug = False):
-        super().__init__(num_agents, render_mode, size, seed, num_resources, fov, show_fov, show_gridlines, draw_numbers, record_sim)
-        self.local_interaction_range = fov  # Set the interaction range equal to FOV
-        self.auction_history = []  # To track past auctions if needed
-        self.initialize_agents()  # Initialize agent-specific attributes
-        self.debug = debug
-        self.rng = np.random.default_rng(seed)  # Initialize the Generator
+    def __init__(self, config: ForagingConfig):
+        super().__init__(config)  # Initialize the base class with the provided config
+        self.__dict__.update(config.__dict__)
 
-        # Default standard deviations for different behaviors
-        self.std_dev_base_return = 0.8
-        self.std_dev_foraging = 0.5
+        # Additional initialization for the subclass
+        self.initialize_agents()  # Initialize agent-specific attributes
+        self.rng = np.random.default_rng(self.seed)  # Initialize the Generator
 
     def initialize_agents(self):
         self._money = {agent: 100 for agent in self.agents}
         self._resource_reward = 50
-        self._battery_usage_rate = 1
-        self._battery_charge_cost = 10
-        self._battery_charge_amount = 10
-        self._min_battery_level = self.size
+        self._battery_usage_rate = self.battery_usage_rate
+        self._battery_charge_cost = self.battery_charge_cost
+        self._battery_charge_amount = self.battery_charge_amount
+        self._min_battery_level = self.min_battery_level
         self._battery_recharge_threshold = 0.5
+        
+        # Default standard deviations for different behaviors
+        self.std_dev_base_return = 0.8
+        self.std_dev_foraging = 0.5
         
         # Initialize the state of each agent
         self.agent_states = {agent: "Foraging" for agent in self.agents}  # Default state is "Foraging"

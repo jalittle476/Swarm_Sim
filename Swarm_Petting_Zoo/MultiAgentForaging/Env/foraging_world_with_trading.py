@@ -1,0 +1,2 @@
+class ForagingEnvironmentWithTrading(Foraging)
+    

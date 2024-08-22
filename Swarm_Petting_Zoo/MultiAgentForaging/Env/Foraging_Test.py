@@ -1,4 +1,5 @@
 from foraging_world_v1 import ForagingEnvironment
+from foraging_config import ForagingConfig
 import numpy as np
 import pygame
 
@@ -60,7 +61,7 @@ def foraging_behavior(env, observation, agent, std_dev=0.5):
         new_action = gaussian_sample(mean_direction, std_dev)
         return new_action
 
-env = ForagingEnvironment(num_agents=20, size = 25, render_mode="human", show_fov = False, draw_numbers=False, num_resources=200)
+env = ForagingEnvironment(config=ForagingConfig())
 env.reset(seed=42)
 battery_safety_margin = 0 # Robot's will not assume perfect knowlege of their battery levels 
 # Define the maximum distance to the base as a threshold

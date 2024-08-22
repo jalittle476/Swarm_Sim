@@ -3,31 +3,27 @@ import copy
 from pettingzoo.utils.env import AECEnv
 from pettingzoo.utils import agent_selector
 from gym import spaces
+from foraging_config import ForagingConfig
 import numpy as np
 import pygame
 import random 
+import heapq
 
 ## Foraging World Without Communication
 
 class ForagingEnvironment(AECEnv):
     metadata = {"name": "foraging_environment_v0", "render_fps": 1000}
 
-    def __init__(self, num_agents, render_mode=None, size=20, seed=255, num_resources=5, fov=2, show_fov = False, show_gridlines = False, draw_numbers = False, record_sim = False, consider_dead_agents_as_obstacles = False):
-        self.np_random = np.random.default_rng(seed)
-        self.size = size  # The size of the square grid
-        self.num_resources = num_resources
-        self.fov = fov
-        self.show_fov = show_fov 
-        self.render_mode = render_mode
-        self.agent_to_visualize = "agent_0"
-        self.show_gridlines = show_gridlines
-        self.draw_numbers = draw_numbers
-        self.paused = False
-        self.record_sim = record_sim
-        self.frame_count = 0
-        self.full_battery_charge = 4 * size # They could explore the perimeter of the space 
-        self.consider_dead_agents_as_obstacles = consider_dead_agents_as_obstacles
+    def __init__(self, config: ForagingConfig):
 
+        # Directly set the class attributes using the config dictionary
+        self.__dict__.update(config.__dict__)
+
+        self.np_random = np.random.default_rng(self.seed)  # Now self.seed is available
+        self.agent_to_visualize = "agent_0"
+        self.paused = False
+        self.frame_count = 0
+        self.full_battery_charge = 4 * self.size  # They could explore the perimeter of the space
         
         pygame.init()
         self.window = None
@@ -38,17 +34,17 @@ class ForagingEnvironment(AECEnv):
         self.grid = np.zeros((self.size, self.size), dtype=int)
         
         # Initialize the possible agents
-        self.possible_agents = [f"agent_{i}" for i in range(num_agents)]
+        self.possible_agents = [f"agent_{i}" for i in range(config.num_agents)]
         self.agent_selection = self.possible_agents[0]
         self.agents = self.possible_agents.copy()
 
         # Initialize observation space and action space 
         self.observation_space = spaces.Dict(
             {
-                "agent_location": spaces.Box(0, size - 1, shape=(2,), dtype=int),
-                "home_base": spaces.Box(0, size - 1, shape=(2,), dtype=int),
-                "resources": spaces.Box(0, size - 1, shape=(2,), dtype=int),
-                "battery_level": spaces.Box(0, size - 1, shape=(2,), dtype=int),
+                "agent_location": spaces.Box(0, self.size - 1, shape=(2,), dtype=int),
+                "home_base": spaces.Box(0, self.size - 1, shape=(2,), dtype=int),
+                "resources": spaces.Box(0, self.size - 1, shape=(2,), dtype=int),
+                "battery_level": spaces.Box(0, self.size - 1, shape=(2,), dtype=int),
             }
         )
         self.action_space = spaces.Discrete(4)
@@ -542,3 +538,4 @@ class ForagingEnvironment(AECEnv):
                 if self.consider_dead_agents_as_obstacles or not self.terminations[other_agent]:
                     return True  # The location is occupied by another agent
         return False  # The location is not occupied
+    
