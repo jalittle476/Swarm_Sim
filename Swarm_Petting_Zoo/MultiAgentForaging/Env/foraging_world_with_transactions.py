@@ -13,13 +13,13 @@ class ForagingEnvironmentWithTransactions(ForagingEnvironment):
         self.rng = np.random.default_rng(self.seed)  # Initialize the Generator
 
     def initialize_agents(self):
-        self._money = {agent: 100 for agent in self.agents}
-        self._resource_reward = 50
+        self._money = {agent: self.initial_money for agent in self.agents}
+        self._resource_reward = self.resource_reward
         self._battery_usage_rate = self.battery_usage_rate
         self._battery_charge_cost = self.battery_charge_cost
         self._battery_charge_amount = self.battery_charge_amount
         self._min_battery_level = self.min_battery_level
-        self._battery_recharge_threshold = 0.5
+        self._battery_recharge_threshold = self.battery_recharge_threshold
         
         # Default standard deviations for different behaviors
         self.std_dev_base_return = 0.8
@@ -121,7 +121,7 @@ class ForagingEnvironmentWithTransactions(ForagingEnvironment):
     def levy_walk_direction(self, current_location):
         """Generate a direction based on a Lévy walk."""
         # Lévy flight parameters
-        beta = 1.5  # Lévy exponent (1 < beta <= 2)
+        beta = self.beta  # Lévy exponent (1 < beta <= 2)
         step_length = self.rng.pareto(beta)  # Lévy distributed step length
 
         # Randomly choose a direction for the Lévy walk
@@ -154,7 +154,7 @@ class ForagingEnvironmentWithTransactions(ForagingEnvironment):
 
         # Default state: Foraging
         state = "Foraging"
-        action = self.foraging_behavior(agent, observation, search_pattern = "levy_walk")
+        action = self.foraging_behavior(agent, observation, self.search_pattern)
 
         self.log_agent_state(agent, observation, state)
         return action
