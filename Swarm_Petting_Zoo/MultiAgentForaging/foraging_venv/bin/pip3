@@ -1,4 +1,4 @@
-#!/Users/john/Documents/Swarm_Sim/Swarm_Petting_Zoo/MultiAgentForaging/foraging_venv/bin/python3
+#!/Users/john/Documents/swarm_sim/Swarm_Petting_Zoo/MultiAgentForaging/foraging_venv/bin/python3
 # -*- coding: utf-8 -*-
 import re
 import sys

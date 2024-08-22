@@ -11,12 +11,13 @@ class ForagingConfig:
     fov: int = 1
     show_fov: bool = True
     show_gridlines: bool = False
-    draw_numbers: bool = False
+    draw_numbers: bool = False #Broken
     record_sim: bool = False
     consider_dead_agents_as_obstacles: bool = False
     render_mode: str = "human"
     debug: bool = False
     
+    #Agent initial configuration
     initial_money: int = 100 
     resource_reward: int = 50
     battery_usage_rate: int = 1
@@ -25,6 +26,7 @@ class ForagingConfig:
     min_battery_level: int = size
     battery_recharge_threshold: float = 0.5
     
+    #For Agent State Behavior
     std_dev_base_return: float = 0.8
     std_dev_foraging: float = 0.5
     
