@@ -12,7 +12,7 @@ import random
 class ForagingEnvironment(AECEnv):
     metadata = {"name": "foraging_environment_v0", "render_fps": 1000}
 
-    def __init__(self, num_agents, render_mode=None, size=20, seed=255, num_resources=5, fov=2, show_fov = False, show_gridlines = False, draw_numbers = False, record_sim = False):
+    def __init__(self, num_agents, render_mode=None, size=20, seed=255, num_resources=5, fov=2, show_fov = False, show_gridlines = False, draw_numbers = False, record_sim = False, consider_dead_agents_as_obstacles = False):
         self.np_random = np.random.default_rng(seed)
         self.size = size  # The size of the square grid
         self.num_resources = num_resources
@@ -26,6 +26,8 @@ class ForagingEnvironment(AECEnv):
         self.record_sim = record_sim
         self.frame_count = 0
         self.full_battery_charge = 4 * size # They could explore the perimeter of the space 
+        self.consider_dead_agents_as_obstacles = consider_dead_agents_as_obstacles
+
         
         pygame.init()
         self.window = None
@@ -176,17 +178,14 @@ class ForagingEnvironment(AECEnv):
 
     
     def _is_location_valid(self, agent, location):
-        # Check if the location is the home base
-        if np.array_equal(location, self._home_base_location):
+        """Check if a location is valid for an agent to move to."""
+        if self._is_home_base(location):
             return True  # The home base can hold any number of agents
 
-        # For other locations, check if they are occupied by an agent
-        for other_agent, agent_location in self._agent_locations.items():
-            if np.array_equal(location, agent_location):
-                return False  # Location is occupied by an agent
+        if self._is_occupied_by_agent(location, exclude_agent=agent):
+            return False  # Location is occupied by another agent
 
-        return True  # Location is not occupied and is not the home base
-
+        return True  # Location is valid and unoccupied
     
     def _simple_avoidance(self, agent, direction):
         # Check alternative directions for avoidance
@@ -451,25 +450,7 @@ class ForagingEnvironment(AECEnv):
     def close(self):
         if self.window is not None:
             pygame.display.quit()
-            pygame.quit()
-
-    # def _generate_resources(self, num_resources):
-    #     # Generate a list of all locations
-    #     all_locations = {(x, y) for x in range(self.size) for y in range(self.size)}
-
-    #     # Remove agent locations and the home base location
-    #     for agent_location in self._agent_locations.values():
-    #         all_locations.discard(tuple(agent_location))
-        
-    #     all_locations.discard(tuple(self._home_base_location))
-
-    #     # Convert to a list and shuffle the remaining locations
-    #     all_locations = list(all_locations)
-    #     self.np_random.shuffle(all_locations)
-        
-        
-    #     #print(food_block)
-    #     return np.array(all_locations[:num_resources])    
+            pygame.quit() 
     
     def _generate_resources(self, num_resources):
         """Generate resource locations on the grid, avoiding agent locations and the home base."""
@@ -549,3 +530,15 @@ class ForagingEnvironment(AECEnv):
         br_x = min(self.size, location[1] + fov + 1)
         
         return tl_y, tl_x, br_y, br_x
+
+    def _is_home_base(self, location):
+        """Check if the given location is the home base."""
+        return np.array_equal(location, self._home_base_location)
+
+    def _is_occupied_by_agent(self, location, exclude_agent=None):
+        """Check if the location is occupied by an agent, excluding a specific agent if needed."""
+        for other_agent, agent_location in self._agent_locations.items():
+            if other_agent != exclude_agent and np.array_equal(location, agent_location):
+                if self.consider_dead_agents_as_obstacles or not self.terminations[other_agent]:
+                    return True  # The location is occupied by another agent
+        return False  # The location is not occupied

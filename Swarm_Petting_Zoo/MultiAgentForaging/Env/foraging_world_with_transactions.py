@@ -9,11 +9,11 @@ class ForagingEnvironmentWithTransactions(ForagingEnvironment):
         self.auction_history = []  # To track past auctions if needed
         self.initialize_agents()  # Initialize agent-specific attributes
         self.debug = debug
-
+        self.rng = np.random.default_rng(seed)  # Initialize the Generator
 
         # Default standard deviations for different behaviors
         self.std_dev_base_return = 0.8
-        self.std_dev_foraging = 0.1
+        self.std_dev_foraging = 0.5
 
     def initialize_agents(self):
         self._money = {agent: 100 for agent in self.agents}
@@ -21,7 +21,7 @@ class ForagingEnvironmentWithTransactions(ForagingEnvironment):
         self._battery_usage_rate = 1
         self._battery_charge_cost = 10
         self._battery_charge_amount = 10
-        self._min_battery_level = 5
+        self._min_battery_level = self.size
         self._battery_recharge_threshold = 0.5
         
         # Initialize the state of each agent
@@ -42,7 +42,7 @@ class ForagingEnvironmentWithTransactions(ForagingEnvironment):
         """Sample a discrete action based on the direction vector with added Gaussian noise."""
 
         # Introduce a probability for no movement
-        if np.random.random() < no_movement_prob:
+        if self.rng.random() < no_movement_prob:
             if self.debug:
                 print(f"Agent chooses not to move. (No movement with probability {no_movement_prob})")
             return None  # No movement action (could return a specific "no movement" code if needed)
@@ -53,7 +53,7 @@ class ForagingEnvironmentWithTransactions(ForagingEnvironment):
             direction = direction / norm
         
         # Apply Gaussian noise to the direction
-        sampled_direction = np.random.normal(direction, std_dev)
+        sampled_direction = self.rng.normal(direction, std_dev)
         if self.debug:
             print(f"Original direction: {direction}, Sampled direction: {sampled_direction}")
         
@@ -82,7 +82,7 @@ class ForagingEnvironmentWithTransactions(ForagingEnvironment):
         
         return action
 
-    def foraging_behavior(self, agent, observation):
+    def foraging_behavior(self, agent, observation, search_pattern):
         """Determine the agent's action based on its state and environment."""
         carrying = self.get_carrying(agent)
         visible_resources = observation["resources"]
@@ -103,9 +103,12 @@ class ForagingEnvironmentWithTransactions(ForagingEnvironment):
                 # If resources are visible, move towards the nearest one
                 nearest_resource = min(visible_resources, key=lambda r: self.manhattan_distance(agent_location, r))
                 direction_to_resource = self.calculate_direction(agent_location, nearest_resource)
-            else:
+            elif search_pattern == "levy_walk":
                 # If no resources are visible, explore randomly
-                direction_to_resource = np.random.normal(0, self.std_dev_foraging, 2)  # Random exploration direction
+                direction_to_resource = self.levy_walk_direction(agent_location)
+            else:
+                # Default search pattern: Move towards the base
+                direction_to_resource = self.calculate_direction(agent_location, base_location)
 
             # # Avoid the base if near and not carrying a resource
             # if distance_to_base <= base_proximity_threshold:
@@ -113,6 +116,20 @@ class ForagingEnvironmentWithTransactions(ForagingEnvironment):
 
             # Sample the direction with added Gaussian noise for imperfect localization
             return self.gaussian_sample(direction_to_resource, self.std_dev_foraging)
+        
+    def levy_walk_direction(self, current_location):
+        """Generate a direction based on a Lévy walk."""
+        # Lévy flight parameters
+        beta = 1.5  # Lévy exponent (1 < beta <= 2)
+        step_length = self.rng.pareto(beta)  # Lévy distributed step length
+
+        # Randomly choose a direction for the Lévy walk
+        angle = self.rng.uniform(0, 2 * np.pi)
+        direction = np.array([np.cos(angle), np.sin(angle)]) * step_length
+
+        # Normalize and scale direction
+        direction = direction / np.linalg.norm(direction) * min(step_length, self.size // 2)
+        return direction
 
 
     def manhattan_distance(self, a, b):
@@ -136,7 +153,7 @@ class ForagingEnvironmentWithTransactions(ForagingEnvironment):
 
         # Default state: Foraging
         state = "Foraging"
-        action = self.foraging_behavior(agent, observation)
+        action = self.foraging_behavior(agent, observation, search_pattern = "levy_walk")
 
         self.log_agent_state(agent, observation, state)
         return action
@@ -245,17 +262,6 @@ class ForagingEnvironmentWithTransactions(ForagingEnvironment):
         observation['money'] = self.get_money(agent)  # Assuming get_money is a method that returns the agent's money
         
         return observation
-
-    # def get_nearby_agents(self, agent):
-    #     """Detect agents within the local interaction range (FOV)."""
-    #     nearby_agents = []
-    #     agent_pos = self.get_agent_location(agent)
-    #     for other_agent in self.agents:
-    #         if other_agent != agent:
-    #             other_agent_pos = self.get_agent_location(other_agent)
-    #             if self.is_in_local_range(agent_pos, other_agent_pos):
-    #                 nearby_agents.append(other_agent)
-    #     return nearby_agents
     
     def get_nearby_agents(self, agent):
         nearby_agents = []
@@ -272,17 +278,7 @@ class ForagingEnvironmentWithTransactions(ForagingEnvironment):
                         nearby_agents.append(other_agent)
 
         return nearby_agents
-
-
-    # def is_in_local_range(self, agent_pos, other_agent_pos):
-    #     """Check if another agent is within the local interaction range."""
-    #     distance = self.calculate_distance(agent_pos, other_agent_pos)
-    #     return distance <= self.local_interaction_range
-
-    # def calculate_distance(self, pos1, pos2):
-    #     """Calculate the Euclidean distance between two positions."""
-    #     return np.linalg.norm(np.array(pos1) - np.array(pos2))
-    
+ 
     def is_in_local_range(self, agent_pos, other_agent_pos):
         """Check if another agent is within the local interaction range (FOV) using grid-based lookup."""
         tl_y, tl_x, br_y, br_x = self.get_fov_corners(agent_pos, self.local_interaction_range)
@@ -299,20 +295,6 @@ class ForagingEnvironmentWithTransactions(ForagingEnvironment):
         """Retrieve the money of an agent."""
         return self._money[agent]  # Adjust this based on your actual implementation
 
-    # def calculate_local_density(self, agent):
-    #     """Calculate the number of agents within a local interaction range."""
-    #     agent_location = self.get_agent_location(agent)
-    #     local_density = 0
-        
-    #     for other_agent in self.agents:
-    #         if other_agent != agent:  # Don't count the agent itself
-    #             other_agent_location = self.get_agent_location(other_agent)
-    #             distance_to_other_agent = np.linalg.norm(self.calculate_direction(agent_location, other_agent_location))
-    #             if distance_to_other_agent <= self.local_interaction_range:
-    #                 local_density += 1
-        
-    #     return local_density
-    
     def calculate_local_density(self, agent):
         """Calculate the number of agents within a local interaction range using grid-based lookup."""
         agent_location = self.get_agent_location(agent)
