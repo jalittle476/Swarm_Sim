@@ -141,11 +141,11 @@ class ForagingEnvironmentWithTransactions(ForagingEnvironment):
         """Decide on an action for the agent based on its state and log the state."""
         observation = self.observe(agent)
         battery_level = observation['battery_level']
-        _min_battery_level_level = 20  # Threshold for returning to base
+        self.min_battery_level = 20  # Threshold for returning to base
         carrying = self.get_carrying(agent)
 
         # Determine state based on conditions
-        if carrying or self.should_return_to_base(battery_level, _min_battery_level_level):
+        if carrying or self.should_return_to_base(battery_level, self.min_battery_level):
             state = "Returning to Base"
             action = self.return_to_base(self.get_agent_location(agent), self.get_home_base_location())
             if action is not None:

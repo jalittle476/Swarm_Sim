@@ -203,18 +203,14 @@ class ForagingEnvironment(AECEnv):
         return self._agent_locations[agent]  # Stay in place if no valid move is found
 
     def _render(self):
-        
         if self.window is None and self.render_mode == "human":
-            self.window = pygame.display.set_mode(
-                (self.window_size, self.window_size))
+            self.window = pygame.display.set_mode((self.window_size, self.window_size))
         if self.clock is None and self.render_mode == "human":
             self.clock = pygame.time.Clock()
 
         canvas = pygame.Surface((self.window_size, self.window_size))
         canvas.fill((255, 255, 255))
-        pix_square_size = (
-            self.window_size / self.size
-        )  # The size of a single grid square in pixels
+        pix_square_size = self.window_size / self.size  # The size of a single grid square in pixels
 
         # Draw the home base
         pygame.draw.rect(
@@ -237,71 +233,32 @@ class ForagingEnvironment(AECEnv):
                 ),
             )
 
-        if self.draw_numbers: 
-             # Now we draw all the agents
-            for agent, location in self._agent_locations.items():
-                # Check if the agent is carrying a resource
-                is_carrying_resource = self._carrying[agent]
-                
-                # Check if the agent's battery level is zero
-                is_battery_depleted = self._battery_level[agent] == 0
-                
-                # Determine the agent's color based on its status
-                if is_battery_depleted:
-                    agent_color = (0, 0, 0)  # Black color for zero battery
-                elif is_carrying_resource:
-                    agent_color = (0, 102, 0)  # Green color if carrying a resource
-                else:
-                    agent_color = (0, 0, 255)  # Blue color otherwise
+        # Draw the agents
+        for agent, location in self._agent_locations.items():
+            is_carrying_resource = self._carrying[agent]
+            is_battery_depleted = self._battery_level[agent] == 0
+            agent_color = (0, 0, 0) if is_battery_depleted else (
+                (0, 102, 0) if is_carrying_resource else (0, 0, 255)
+            )
 
-                pygame.draw.circle(
-                    canvas,
-                    agent_color,  # Use the determined color
-                    (location + 0.5) * pix_square_size,
-                    pix_square_size / 3,
+            pygame.draw.circle(
+                canvas,
+                agent_color,
+                (location + 0.5) * pix_square_size,
+                pix_square_size / 3,
+            )
+
+            if self.draw_numbers:
+                font = pygame.font.SysFont(None, 20)
+                text_surface = font.render(str(agent), True, (0, 0, 0))
+                text_position = (
+                    (location[0] + 0.3) * pix_square_size,
+                    (location[1] - 0.2) * pix_square_size,
                 )
-
-                # Draw the agent's index number
-                font = pygame.font.SysFont(None, 20)  # Choose an appropriate font size
-                text_surface = font.render(str(idx), True, (0, 0, 0))  # White text
-                # Position the text above the agent
-                text_position = ((location[0] + 0.3) * pix_square_size, (location[1] - 0.2) * pix_square_size)  # Adjust this position as needed
                 canvas.blit(text_surface, text_position)
-        
-        else:
-            
-            # Now we draw all the agents
-            for agent, location in self._agent_locations.items():
-                # Check if the agent is carrying a resource
-                is_carrying_resource = self._carrying[agent]
-                
-                # Check if the agent's battery is low
-                is_battery_low = self._battery_level[agent] < self.size
-                
-                # Check if the agent's battery level is zero
-                is_battery_depleted = self._battery_level[agent] == 0
 
-                # Determine the agent's color based on its status
-                if is_battery_depleted:
-                    agent_color = (0, 0, 0)  # Black color for zero battery
-                elif is_battery_low:
-                    agent_color = (255,0,0) # Red color if battery is low 
-                elif is_carrying_resource:
-                    agent_color = (0, 255, 0)  # Green color if carrying a resource
-                else:
-                    agent_color = (0, 0, 255)  # Blue color otherwise
-
-                pygame.draw.circle(
-                    canvas,
-                    agent_color,  # Use the determined color
-                    (location + 0.5) * pix_square_size,
-                    pix_square_size / 3,
-                )
-            
-        
-        
+        # Optionally draw gridlines
         if self.show_gridlines:
-            # Finally, add some gridlines
             for x in range(self.size + 1):
                 pygame.draw.line(
                     canvas,
@@ -318,89 +275,49 @@ class ForagingEnvironment(AECEnv):
                     width=3,
                 )
 
-       # Visualize the FOV
-        fov = self.fov  
-
+        # Visualize the FOV
         if self.show_fov:
-            
-            # Get the location of the currently selected agent
             current_agent_location = self._agent_locations[self.agent_to_visualize]
+            tl_x = max(0, current_agent_location[0] - self.fov)
+            tl_y = max(0, current_agent_location[1] - self.fov)
+            br_x = min(self.size, current_agent_location[0] + self.fov + 1)
+            br_y = min(self.size, current_agent_location[1] + self.fov + 1)
 
-            # Get the coordinates of the top-left and bottom-right corners of the FOV
-            # Calculate the boundaries for the FOV
-            tl_x = max(0, current_agent_location[0] - fov)
-            tl_y = max(0, current_agent_location[1] - fov)
-            br_x = min(self.size, current_agent_location[0] + fov + 1)
-            br_y = min(self.size, current_agent_location[1] + fov + 1)
-
-
-            # Create a semi-transparent surface for the FOV
             fov_surface = pygame.Surface((self.window_size, self.window_size), pygame.SRCALPHA)
-            fov_color = (100, 100, 255, 80)  # RGBA: semi-transparent blue
+            fov_color = (100, 100, 255, 80)
 
-            # Fill the cells within the FOV
             for x in range(tl_x, br_x):
                 for y in range(tl_y, br_y):
                     pygame.draw.rect(fov_surface, fov_color, pygame.Rect(pix_square_size * np.array([x, y]), (pix_square_size, pix_square_size)))
 
-            # Blit the FOV surface onto the main canvas
             canvas.blit(fov_surface, (0, 0))
 
-          # Pausing code
-        if self.paused:
-            font = pygame.font.SysFont(None, 55)
-            pause_surf = font.render('Paused', True, (255, 0, 0))
-            pause_rect = pause_surf.get_rect(center=(self.window_size/2, self.window_size/2))
-            self.window.blit(pause_surf, pause_rect)
-        
-        
-        # Determine the number of active agents based on the terminations attribute
+        # Display number of active agents
         num_active_agents = sum(not terminated for terminated in self.terminations.values())
-
-        # Define the font and size
         font = pygame.font.SysFont(None, 24)
-
-        # Create a surface containing the text
         text_surface = font.render(f'Active Agents: {num_active_agents}', True, (0, 0, 0))
-
-        # Define the position where the text will be drawn (you can adjust this as needed)
         text_position = (10, 10)
-
-        # Draw the text on the canvas
         canvas.blit(text_surface, text_position)
-        
-        # Initialize position for the key; adjust x_offset to place the key on the right
-        x_offset, y_offset = self.window_size + 10, 10  
-        line_height = 30  # Space between lines
 
-        # Initialize the font
-        font = pygame.font.SysFont(None, 24)
-
-        # Render text for the key
+        # Render the key
+        x_offset, y_offset = self.window_size + 10, 10
+        line_height = 30
         key_title_surface = font.render("Key:", True, (0, 0, 0))
         self.window.blit(key_title_surface, (x_offset, y_offset))
         y_offset += line_height
-        
+
         if self.render_mode == "human":
-            # The following line copies our drawings from `canvas` to the visible window
             self.window.blit(canvas, canvas.get_rect())
             pygame.event.pump()
             pygame.display.update()
-
-            # We need to ensure that human-rendering occurs at the predefined framerate.
-            # The following line will automatically add a delay to keep the framerate stable.
             self.clock.tick(self.metadata["render_fps"])
-            
+
             if self.record_sim:
-                 # Save the current frame as an image
                 frame_filename = f'frames/frame_{self.frame_count:05d}.png'
                 pygame.image.save(self.window, frame_filename)
                 self.frame_count += 1
         else:  # rgb_array
-            return np.transpose(
-                np.array(pygame.surfarray.pixels3d(canvas)), axes=(1, 0, 2)
-            )
-
+            return np.transpose(np.array(pygame.surfarray.pixels3d(canvas)), axes=(1, 0, 2))
 
     def _get_obs(self, agent):
 

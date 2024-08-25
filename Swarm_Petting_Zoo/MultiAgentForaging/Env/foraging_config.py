@@ -11,7 +11,7 @@ class ForagingConfig:
     fov: int = 1
     show_fov: bool = True
     show_gridlines: bool = False
-    draw_numbers: bool = False #Broken
+    draw_numbers: bool = True 
     record_sim: bool = False
     consider_dead_agents_as_obstacles: bool = False
     render_mode: str = "human"
