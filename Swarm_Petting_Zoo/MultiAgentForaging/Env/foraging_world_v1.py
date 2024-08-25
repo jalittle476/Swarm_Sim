@@ -482,30 +482,6 @@ class ForagingEnvironment(AECEnv):
     def get_agent_location(self, agent):
         return self._agent_locations[agent]
 
-    def get_agent_awareness(self, agent, radius=1):
-        # Get the agent's location
-        agent_x, agent_y = self._agent_locations[agent]
-
-        # Initialize an empty list to store the contents of the cells within the agent's area of awareness
-        awareness = []
-
-        # Check each cell within the radius of the agent's location
-        for dx in range(-radius, radius + 1):
-            for dy in range(-radius, radius + 1):
-                x = agent_x + dx
-                y = agent_y + dy
-
-                # Check if the cell is within the grid
-                if 0 <= x < self.size and 0 <= y < self.size:
-                    if (x, y) in self._resources_location:
-                        awareness.append('resource')
-                    elif (x, y) == tuple(self._home_base_location):
-                        awareness.append('home_base')
-                    else:
-                        awareness.append('empty')
-
-        return awareness
-
     def get_fov_corners(self, location, fov):
         """
         Calculate the top-left and bottom-right corners of the FOV centered around a given location.

@@ -280,14 +280,6 @@ class ForagingEnvironmentWithTransactions(ForagingEnvironment):
 
         return nearby_agents
  
-    def is_in_local_range(self, agent_pos, other_agent_pos):
-        """Check if another agent is within the local interaction range (FOV) using grid-based lookup."""
-        tl_y, tl_x, br_y, br_x = self.get_fov_corners(agent_pos, self.local_interaction_range)
-
-        # Check if the other agent's position falls within the FOV boundaries
-        return tl_y <= other_agent_pos[0] < br_y and tl_x <= other_agent_pos[1] < br_x
-
-
     def render(self, mode="human"):
         """Call the existing _render method to avoid NotImplementedError."""
         return self._render()  # This will call the existing _render function in the base class
@@ -297,18 +289,5 @@ class ForagingEnvironmentWithTransactions(ForagingEnvironment):
         return self._money[agent]  # Adjust this based on your actual implementation
 
     def calculate_local_density(self, agent):
-        """Calculate the number of agents within a local interaction range using grid-based lookup."""
-        agent_location = self.get_agent_location(agent)
-        local_density = 0
-
-        # Get FOV corners for the agent
-        tl_y, tl_x, br_y, br_x = self.get_fov_corners(agent_location, self.local_interaction_range)
-
-        # Iterate through the grid slice to count nearby agents
-        for y in range(tl_y, br_y):
-            for x in range(tl_x, br_x):
-                for other_agent, other_agent_location in self._agent_locations.items():
-                    if other_agent != agent and np.array_equal(other_agent_location, [y, x]):
-                        local_density += 1
-
-        return local_density
+        """Calculate the number of agents within the agent's FOV."""
+        return len(self.get_nearby_agents(agent))
