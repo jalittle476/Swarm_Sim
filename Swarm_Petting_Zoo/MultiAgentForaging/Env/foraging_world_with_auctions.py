@@ -6,6 +6,7 @@ class ForagingEnvironmentWithAuctions(ForagingEnvironmentWithTransactions):
         self._exchange_seller = None
         self._exchange_buyer = None
         self._exchange_bid = None
+        
 
     def initiate_auction(self, seller_agent):
         """Initiate an auction and prepare for resource exchange."""

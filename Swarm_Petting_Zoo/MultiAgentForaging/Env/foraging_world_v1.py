@@ -7,7 +7,7 @@ from foraging_config import ForagingConfig
 import numpy as np
 import pygame
 import random 
-import heapq
+
 
 ## Foraging World Without Communication
 
@@ -20,11 +20,9 @@ class ForagingEnvironment(AECEnv):
         self.__dict__.update(config.__dict__)
 
         self.np_random = np.random.default_rng(self.seed)  # Now self.seed is available
-        self.agent_to_visualize = "agent_0"
         self.paused = False
         self.frame_count = 0
-        self.full_battery_charge = 4 * self.size  # They could explore the perimeter of the space
-        
+      
         pygame.init()
         self.window = None
         self.clock = None
@@ -37,6 +35,14 @@ class ForagingEnvironment(AECEnv):
         self.possible_agents = [f"agent_{i}" for i in range(config.num_agents)]
         self.agent_selection = self.possible_agents[0]
         self.agents = self.possible_agents.copy()
+        
+        # Initialize the cache for agent colors
+        self.agent_color_cache = {}  # A dictionary to store the colors of agents
+
+        # Initialize agent colors for all agents
+        for agent_id in range(self.num_agents):
+            agent_name = f"agent_{agent_id}"
+            self.agent_color_cache[agent_name] = (0, 0, 255)  # Default color: Blue
 
         # Initialize observation space and action space 
         self.observation_space = spaces.Dict(
@@ -65,8 +71,6 @@ class ForagingEnvironment(AECEnv):
         first time.
         """
         
-
-
     def reset(self, seed=None, options=None):
          # Reset the grid
         self.grid.fill(0)
@@ -83,7 +87,7 @@ class ForagingEnvironment(AECEnv):
 
 
         # Generate resources and update the grid
-        self._resources_location = self._generate_resources(self.num_resources)
+        self._resources_location = self._generate_resources(self.num_resources, self.distribution_type, self.num_clusters)
         for resource_location in self._resources_location:
             self.grid[resource_location[0], resource_location[1]] = 2  # Mark the resource
 
@@ -235,11 +239,8 @@ class ForagingEnvironment(AECEnv):
 
         # Draw the agents
         for agent, location in self._agent_locations.items():
-            is_carrying_resource = self._carrying[agent]
-            is_battery_depleted = self._battery_level[agent] == 0
-            agent_color = (0, 0, 0) if is_battery_depleted else (
-                (0, 102, 0) if is_carrying_resource else (0, 0, 255)
-            )
+            # Use cached color
+            agent_color = self.agent_color_cache[agent]
 
             pygame.draw.circle(
                 canvas,
@@ -319,6 +320,23 @@ class ForagingEnvironment(AECEnv):
         else:  # rgb_array
             return np.transpose(np.array(pygame.surfarray.pixels3d(canvas)), axes=(1, 0, 2))
 
+    def _update_agent_color(self, agent):
+        """
+        Update the color of the agent based on its current state.
+        This function is called only when the agent's state changes.
+        """
+        is_carrying_resource = self._carrying[agent]
+        battery_level = self._battery_level[agent]
+
+        if battery_level == 0:
+            self.agent_color_cache[agent] = (0, 0, 0)  # Black for zero battery
+        elif battery_level < self.size:
+            self.agent_color_cache[agent] = (255, 0, 0)  # Red for low battery
+        elif is_carrying_resource:
+            self.agent_color_cache[agent] = (0, 102, 0)  # Green if carrying a resource
+        else:
+            self.agent_color_cache[agent] = (0, 0, 255)  # Blue otherwise
+    
     def _get_obs(self, agent):
 
         # Get the agent's current location
@@ -385,8 +403,67 @@ class ForagingEnvironment(AECEnv):
 
         return selected_resource_locations
 
+    def _generate_resources(self, num_resources, distribution_type='uniform', num_clusters=3):
+        """Generate resource locations on the grid with different distribution types.
+
+        Args:
+            num_resources (int): Number of resources to generate.
+            distribution_type (str): Type of distribution to use ('uniform' or 'clustered').
+            num_clusters (int): Number of clusters for the 'clustered' distribution.
         
-        
+        Returns:
+            np.ndarray: Array of generated resource locations.
+        """
+        # Generate a set of all possible locations on the grid
+        all_locations = {(x, y) for x in range(self.size) for y in range(self.size)}
+
+        # Exclude agent locations and the home base location
+        excluded_locations = set(tuple(loc) for loc in self._agent_locations.values())
+        excluded_locations.add(tuple(self._home_base_location))
+
+        # Get available locations by subtracting the excluded ones
+        available_locations = list(all_locations - excluded_locations)
+
+        if distribution_type == 'uniform':
+            # Uniform Distribution: Randomly select locations from all available locations
+            self.np_random.shuffle(available_locations)
+            selected_resource_locations = np.array(available_locations[:num_resources])
+            return selected_resource_locations
+
+        elif distribution_type == 'clustered':
+            # Clustered Distribution: Gaussian around random cluster centers
+            self.np_random.shuffle(available_locations)
+            cluster_centers = available_locations[:num_clusters]
+
+            # Initialize a list to store resource locations
+            selected_resource_locations = []
+
+            # Generate resources around each cluster center
+            for center in cluster_centers:
+                center_x, center_y = center
+                cluster_size = num_resources // num_clusters
+
+                for _ in range(cluster_size):
+                    # Generate Gaussian-distributed offsets around the center
+                    offset_x = int(self.np_random.normal(0, 1.5))  # mean = 0, stddev = 1.5
+                    offset_y = int(self.np_random.normal(0, 1.5))
+                    new_location = (center_x + offset_x, center_y + offset_y)
+
+                    # Ensure the new location is within grid bounds and not excluded
+                    if (0 <= new_location[0] < self.size and
+                        0 <= new_location[1] < self.size and
+                        new_location not in excluded_locations):
+                        selected_resource_locations.append(new_location)
+
+                        # Stop if we reach the desired number of resources
+                        if len(selected_resource_locations) >= num_resources:
+                            return np.array(selected_resource_locations)
+
+            return np.array(selected_resource_locations)
+
+        else:
+            raise ValueError("Unsupported distribution type. Choose 'uniform' or 'clustered'.")
+
 
     # Below are functions related to the foraging aspects of the simulation
 

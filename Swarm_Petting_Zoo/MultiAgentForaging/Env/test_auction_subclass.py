@@ -1,11 +1,11 @@
 
-from foraging_world_with_auctions import ForagingEnvironmentWithAuctions
+from foraging_world_with_markets import ForagingEnvironmentWithMarkets
 from foraging_config import ForagingConfig
 import time
 
 def test_auction_subclass_features(step_limit=5):
     # Initialize the environment with the auction subclass
-    env = ForagingEnvironmentWithAuctions(config=ForagingConfig())
+    env = ForagingEnvironmentWithMarkets(config=ForagingConfig())
     env.reset(seed=42)
 
     for agent in env.agent_iter():
