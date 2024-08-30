@@ -7,28 +7,28 @@ class ForagingEnvironmentWithMarkets(ForagingEnvironment):
     def __init__(self, config: ForagingConfig):
         super().__init__(config)  # Initialize the base class with the provided config
         
-
         # Additional initialization for the subclass
-        self.initialize_agents()  # Initialize agent-specific attributes
         self.rng = np.random.default_rng(self.seed)  # Initialize the Generator
-        
+        self.initialize_agents()  # Initialize agent-specific attributes
+
         self.__dict__.update(config.__dict__)
 
     def initialize_agents(self):
         self._money = {agent: self.initial_money for agent in self.agents}
-        # self._resource_reward = self.resource_reward
-        # self._battery_usage_rate = self.battery_usage_rate
-        # self._battery_charge_cost = self.battery_charge_cost
-        # self._battery_charge_amount = self.battery_charge_amount
-        # self._min_battery_level = self.min_battery_level
-        # self._battery_recharge_threshold = self.battery_recharge_threshold
-        
-        # # Default standard deviations for different behaviors
-        # self.std_dev_base_return = 0.8
-        # self.std_dev_foraging = 0.5
         
         # Initialize the state of each agent
         self.agent_states = {agent: "Foraging" for agent in self.agents}  # Default state is "Foraging"
+        
+        """Initialize direction and steps remaining for each agent."""
+        grid_directions = [np.array([0, 1]), np.array([0, -1]), np.array([-1, 0]), np.array([1, 0])]  # Up, Down, Left, Right
+
+        self.current_direction = {}  # Store the current direction for each agent
+        self.steps_remaining_in_direction = {}  # Store the number of steps remaining in the current direction for each agent
+    
+        for agent in self.agents:
+            # Start each agent with a random direction
+            self.current_direction[agent] = self.rng.choice(grid_directions)
+            self.steps_remaining_in_direction[agent] = 0  # Start with 0 remaining steps; will be set on first Lévy walk
 
     def calculate_direction(self, start, end):
         """Calculate the direction vector from start to end."""
@@ -92,47 +92,75 @@ class ForagingEnvironmentWithMarkets(ForagingEnvironment):
         agent_location = observation["agent_location"]
         base_location = observation["home_base"]
 
-        # # Dynamically adjust the base proximity threshold to avoid base if not carrying
-        # base_proximity_threshold = self.adjust_base_proximity_threshold(agent)
+        # Determine the current direction for the agent
+        if search_pattern == "levy_walk":
+            if self.steps_remaining_in_direction[agent] > 0:
+                # Continue in the current direction if steps remain
+                current_direction = self.current_direction[agent]
+                self.steps_remaining_in_direction[agent] -= 1
+            else:
+                # Choose a new direction using the Lévy walk
+                current_direction = self.levy_walk_direction(self.current_direction[agent],agent)
+                self.current_direction[agent] = current_direction
+                self.steps_remaining_in_direction[agent] = int(self.rng.pareto(self.beta))  # Update steps to persist
 
-        # # Calculate the distance to the base
-        # distance_to_base = self.manhattan_distance(agent_location, base_location)
+        elif visible_resources:
+            # If resources are visible, move towards the nearest one
+            nearest_resource = min(visible_resources, key=lambda r: self.manhattan_distance(agent_location, r))
+            current_direction = self.calculate_direction(agent_location, nearest_resource)
 
+        else:
+            # Default search pattern: Move towards the base
+            current_direction = self.calculate_direction(agent_location, base_location)
+
+        # Decide the next action based on the agent's state
         if carrying:
             # If carrying a resource, return to base
-            return self.return_to_base(agent_location, base_location)
+            direction_to_resource = self.return_to_base(agent_location, base_location)
         else:
-            if visible_resources:
-                # If resources are visible, move towards the nearest one
-                nearest_resource = min(visible_resources, key=lambda r: self.manhattan_distance(agent_location, r))
-                direction_to_resource = self.calculate_direction(agent_location, nearest_resource)
-            elif search_pattern == "levy_walk":
-                # If no resources are visible, explore randomly
-                direction_to_resource = self.levy_walk_direction(agent_location)
-            else:
-                # Default search pattern: Move towards the base
-                direction_to_resource = self.calculate_direction(agent_location, base_location)
+            # If not carrying, use the current direction decided above
+            direction_to_resource = current_direction
 
-            # # Avoid the base if near and not carrying a resource
-            # if distance_to_base <= base_proximity_threshold:
-            #     direction_to_resource = -self.calculate_direction(agent_location, base_location)  # Direct away from base
+        # Sample the direction with added Gaussian noise for imperfect localization
+        return self.gaussian_sample(direction_to_resource, self.std_dev_foraging)
 
-            # Sample the direction with added Gaussian noise for imperfect localization
-            return self.gaussian_sample(direction_to_resource, self.std_dev_foraging)
         
-    def levy_walk_direction(self, current_location):
-        """Generate a direction based on a Lévy walk."""
+    def levy_walk_direction(self, agent, current_direction):
+        """Generate a direction for a Lévy walk in a grid world, given single-step movement constraints."""
+        
         # Lévy flight parameters
         beta = self.beta  # Lévy exponent (1 < beta <= 2)
-        step_length = self.rng.pareto(beta)  # Lévy distributed step length
+        step_length = int(self.rng.pareto(beta))  # Lévy distributed step length, converted to an integer
 
-        # Randomly choose a direction for the Lévy walk
-        angle = self.rng.uniform(0, 2 * np.pi)
-        direction = np.array([np.cos(angle), np.sin(angle)]) * step_length
+        # Possible directions in the grid (up, down, left, right)
+        grid_directions = {
+            "up": np.array([0, 1]),
+            "down": np.array([0, -1]),
+            "left": np.array([-1, 0]),
+            "right": np.array([1, 0])
+        }
 
-        # Normalize and scale direction
-        direction = direction / np.linalg.norm(direction) * min(step_length, self.size // 2)
+        # Determine the base angle of the current direction
+        base_angle = np.arctan2(current_direction[1], current_direction[0])
+
+        # Bias the angle to prioritize forward movement within a certain range
+        forward_bias_range = np.pi / 4  # Example: +/- 45 degrees around the current direction
+        new_angle = self.rng.uniform(base_angle - forward_bias_range, base_angle + forward_bias_range)
+
+        # Determine the closest grid direction based on the biased angle
+        cos_angle = np.cos(new_angle)
+        sin_angle = np.sin(new_angle)
+
+        if abs(cos_angle) > abs(sin_angle):  # More horizontal movement
+            direction = grid_directions["right"] if cos_angle > 0 else grid_directions["left"]
+        else:  # More vertical movement
+            direction = grid_directions["up"] if sin_angle > 0 else grid_directions["down"]
+
+        # Store the number of steps to persist in this direction
+        self.steps_remaining_in_direction[agent] = step_length  # Persist for 'step_length' moves
+
         return direction
+
 
 
     def manhattan_distance(self, a, b):

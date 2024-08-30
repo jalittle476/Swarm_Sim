@@ -110,7 +110,7 @@ class ForagingEnvironmentWithTransactions(ForagingEnvironment):
                 # If no resources are visible, explore randomly
                 direction_to_resource = self.levy_walk_direction(agent_location)
             else:
-                # Default search pattern: Move towards the base
+                # Default search pattern
                 direction_to_resource = self.calculate_direction(agent_location, base_location)
 
             # # Avoid the base if near and not carrying a resource
