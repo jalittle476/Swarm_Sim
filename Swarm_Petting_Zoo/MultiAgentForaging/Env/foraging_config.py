@@ -33,8 +33,8 @@ class ForagingConfig:
     
     
     #For Agent State Behavior
-    std_dev_base_return: float = 1
-    std_dev_foraging: float = 1
+    std_dev_base_return: float = 0
+    std_dev_foraging: float = 0
     
     #For Levy walk
     search_pattern: str = "levy_walk"

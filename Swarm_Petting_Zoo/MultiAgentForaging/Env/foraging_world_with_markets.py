@@ -41,14 +41,8 @@ class ForagingEnvironmentWithMarkets(ForagingEnvironment):
         adjusted_threshold = min(base_threshold + local_density, max_threshold)
         return adjusted_threshold
 
-    def gaussian_sample(self, direction, std_dev, no_movement_prob=0.1):
+    def gaussian_sample(self, direction, std_dev):
         """Sample a discrete action based on the direction vector with added Gaussian noise."""
-
-        # Introduce a probability for no movement
-        if self.rng.random() < no_movement_prob:
-            if self.debug:
-                print(f"Agent chooses not to move. (No movement with probability {no_movement_prob})")
-            return None  # No movement action (could return a specific "no movement" code if needed)
 
         # Normalize the direction vector
         norm = np.linalg.norm(direction)
