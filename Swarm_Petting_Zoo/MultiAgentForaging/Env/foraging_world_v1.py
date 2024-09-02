@@ -86,10 +86,19 @@ class ForagingEnvironment(AECEnv):
             self.grid[self._agent_locations[agent][0], self._agent_locations[agent][1]] = 1  # Mark the agent
 
 
+        # # Generate resources and update the grid
+        # self._resources_location = self._generate_resources(self.num_resources, self.distribution_type, self.num_clusters)
+        # for resource_location in self._resources_location:
+        #     self.grid[resource_location[0], resource_location[1]] = 2  # Mark the resource
+        
         # Generate resources and update the grid
-        self._resources_location = self._generate_resources(self.num_resources, self.distribution_type, self.num_clusters)
+        generated_resources = self._generate_resources(self.num_resources, self.distribution_type, self.num_clusters)
+        self._resources_location = set(map(tuple, generated_resources))
+
+        # Update the grid to mark resource locations
         for resource_location in self._resources_location:
             self.grid[resource_location[0], resource_location[1]] = 2  # Mark the resource
+
 
         # Reset carrying status and battery level for each agent
         self._carrying = {agent: False for agent in self.possible_agents}
@@ -147,13 +156,22 @@ class ForagingEnvironment(AECEnv):
         self._agent_locations[agent] = np.clip(new_location, 0, self.size - 1)
         self.grid[self._agent_locations[agent][0], self._agent_locations[agent][1]] = 1  # Mark the new location
         
+        # # Handle resource collection if the agent is on a resource location
+        # for i in range(len(self._resources_location)):
+        #     if np.array_equal(self._agent_locations[agent], self._resources_location[i]) and not self._carrying[agent]:
+        #         self._carrying[agent] = True
+        #         self.grid[self._resources_location[i][0], self._resources_location[i][1]] = 0  # Remove resource from grid
+        #         self._resources_location = np.delete(self._resources_location, i, axis=0)
+        #         break
+        
         # Handle resource collection if the agent is on a resource location
-        for i in range(len(self._resources_location)):
-            if np.array_equal(self._agent_locations[agent], self._resources_location[i]) and not self._carrying[agent]:
-                self._carrying[agent] = True
-                self.grid[self._resources_location[i][0], self._resources_location[i][1]] = 0  # Remove resource from grid
-                self._resources_location = np.delete(self._resources_location, i, axis=0)
-                break
+        agent_location = tuple(self._agent_locations[agent])  # Convert agent location to a tuple
+
+        if agent_location in self._resources_location and not self._carrying[agent]:
+            self._carrying[agent] = True
+            self.grid[agent_location[0], agent_location[1]] = 0  # Remove resource from grid
+            self._resources_location.remove(agent_location)  # Remove resource from the set
+
 
         # Check if the agent has returned to the base with a resource
         if np.array_equal(self._agent_locations[agent], self._home_base_location) and self._carrying[agent]:
@@ -228,12 +246,15 @@ class ForagingEnvironment(AECEnv):
 
         # Draw the resources
         for resource_location in self._resources_location:
+            # Scale each coordinate separately and convert to integers
+            scaled_location = (int(pix_square_size * resource_location[0]), int(pix_square_size * resource_location[1]))
+            
             pygame.draw.rect(
                 canvas,
                 (0, 102, 0),
                 pygame.Rect(
-                    pix_square_size * resource_location,
-                    (pix_square_size, pix_square_size),
+                    scaled_location,
+                    (int(pix_square_size), int(pix_square_size)),
                 ),
             )
 

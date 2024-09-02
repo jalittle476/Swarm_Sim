@@ -11,7 +11,7 @@ class ForagingConfig:
     fov: int = 2
     show_fov: bool = False
     show_gridlines: bool = False
-    draw_numbers: bool = False 
+    draw_numbers: bool = True
     record_sim: bool = False
     consider_dead_agents_as_obstacles: bool = False
     render_mode: str = "human"
@@ -33,8 +33,8 @@ class ForagingConfig:
     
     
     #For Agent State Behavior
-    std_dev_base_return: float = 0
-    std_dev_foraging: float = 0
+    std_dev_base_return: float = 0.05
+    std_dev_foraging: float = 0.05
     
     #For Levy walk
     search_pattern: str = "levy_walk"
