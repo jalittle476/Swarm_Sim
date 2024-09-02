@@ -9,7 +9,7 @@ class ForagingConfig:
     size: int = 20
     num_resources: int = size**2 // 4
     fov: int = 2
-    show_fov: bool = False
+    show_fov: bool = True
     show_gridlines: bool = False
     draw_numbers: bool = True
     record_sim: bool = False

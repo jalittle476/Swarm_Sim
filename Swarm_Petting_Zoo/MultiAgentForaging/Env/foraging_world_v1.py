@@ -84,12 +84,6 @@ class ForagingEnvironment(AECEnv):
         for agent in self.possible_agents:
             self._agent_locations[agent] = self._home_base_location + np.array([1, 0])
             self.grid[self._agent_locations[agent][0], self._agent_locations[agent][1]] = 1  # Mark the agent
-
-
-        # # Generate resources and update the grid
-        # self._resources_location = self._generate_resources(self.num_resources, self.distribution_type, self.num_clusters)
-        # for resource_location in self._resources_location:
-        #     self.grid[resource_location[0], resource_location[1]] = 2  # Mark the resource
         
         # Generate resources and update the grid
         generated_resources = self._generate_resources(self.num_resources, self.distribution_type, self.num_clusters)
@@ -156,14 +150,6 @@ class ForagingEnvironment(AECEnv):
         self._agent_locations[agent] = np.clip(new_location, 0, self.size - 1)
         self.grid[self._agent_locations[agent][0], self._agent_locations[agent][1]] = 1  # Mark the new location
         
-        # # Handle resource collection if the agent is on a resource location
-        # for i in range(len(self._resources_location)):
-        #     if np.array_equal(self._agent_locations[agent], self._resources_location[i]) and not self._carrying[agent]:
-        #         self._carrying[agent] = True
-        #         self.grid[self._resources_location[i][0], self._resources_location[i][1]] = 0  # Remove resource from grid
-        #         self._resources_location = np.delete(self._resources_location, i, axis=0)
-        #         break
-        
         # Handle resource collection if the agent is on a resource location
         agent_location = tuple(self._agent_locations[agent])  # Convert agent location to a tuple
 
@@ -197,9 +183,15 @@ class ForagingEnvironment(AECEnv):
     
     def _is_location_valid(self, agent, location):
         """Check if a location is valid for an agent to move to."""
+        # Ensure the location is within the grid boundaries
+        if not (0 <= location[0] < self.size and 0 <= location[1] < self.size):
+            return False  # The location is outside the grid
+
+        # Check if the location is the home base
         if self._is_home_base(location):
             return True  # The home base can hold any number of agents
 
+        # Check if the location is occupied by another agent
         if self._is_occupied_by_agent(location, exclude_agent=agent):
             return False  # Location is occupied by another agent
 
@@ -233,6 +225,10 @@ class ForagingEnvironment(AECEnv):
         canvas = pygame.Surface((self.window_size, self.window_size))
         canvas.fill((255, 255, 255))
         pix_square_size = self.window_size / self.size  # The size of a single grid square in pixels
+        
+        # Initialize Pygame font
+        pygame.font.init()
+        font = pygame.font.SysFont('Arial', 12)  # Adjust the font size as needed
 
         # Draw the home base
         pygame.draw.rect(
@@ -257,6 +253,18 @@ class ForagingEnvironment(AECEnv):
                     (int(pix_square_size), int(pix_square_size)),
                 ),
             )
+
+            # Display grid addresses on the simulation grid
+        for x in range(self.size):
+            for y in range(self.size):
+                # Compute the position for the text
+                text_location = (int(pix_square_size * x), int(pix_square_size * y))
+                
+                # Render the grid coordinates as text
+                text_surface = font.render(f'({x}, {y})', True, (0,0,0))  # White text
+                
+                # Blit (draw) the text surface onto the canvas
+                canvas.blit(text_surface, text_location)
 
         # Draw the agents
         for agent, location in self._agent_locations.items():
@@ -359,6 +367,7 @@ class ForagingEnvironment(AECEnv):
             self.agent_color_cache[agent] = (0, 0, 255)  # Blue otherwise
     
     def _get_obs(self, agent):
+        """Get observations about the agent's surroundings, including visible resources and FOV coordinates."""
 
         # Get the agent's current location
         agent_location = self._agent_locations[agent]
@@ -372,16 +381,22 @@ class ForagingEnvironment(AECEnv):
         # Convert the grid slice into a list of resource locations within the FOV
         visible_resources = np.argwhere(fov_slice == 2)
 
-        # Adjust resource coordinates relative to the agent's FOV
+        # Adjust resource coordinates relative to the global grid
         visible_resources = [
             (y + tl_y, x + tl_x) for y, x in visible_resources
+        ]
+
+        # Calculate FOV coordinates (all grid cells within the FOV)
+        fov_coordinates = [
+            (y, x) for y in range(tl_y, br_y) for x in range(tl_x, br_x)
         ]
 
         observation = {
             "agent_location": self._agent_locations[agent],
             "home_base": self._home_base_location,
             "resources": visible_resources,
-            "battery_level": self._battery_level[agent]
+            "battery_level": self._battery_level[agent],
+            "fov_coordinates": fov_coordinates  # Include FOV coordinates in the observation
         }
         
         return observation
@@ -423,7 +438,7 @@ class ForagingEnvironment(AECEnv):
         selected_resource_locations = np.array(available_locations[:num_resources])
 
         return selected_resource_locations
-
+    
     def _generate_resources(self, num_resources, distribution_type='uniform', num_clusters=3):
         """Generate resource locations on the grid with different distribution types.
 
@@ -436,7 +451,7 @@ class ForagingEnvironment(AECEnv):
             np.ndarray: Array of generated resource locations.
         """
         # Generate a set of all possible locations on the grid
-        all_locations = {(x, y) for x in range(self.size) for y in range(self.size)}
+        all_locations = {(y, x) for y in range(self.size) for x in range(self.size)}  # Corrected to (y, x)
 
         # Exclude agent locations and the home base location
         excluded_locations = set(tuple(loc) for loc in self._agent_locations.values())
@@ -461,14 +476,14 @@ class ForagingEnvironment(AECEnv):
 
             # Generate resources around each cluster center
             for center in cluster_centers:
-                center_x, center_y = center
+                center_y, center_x = center  # Corrected order to (y, x)
                 cluster_size = num_resources // num_clusters
 
                 for _ in range(cluster_size):
                     # Generate Gaussian-distributed offsets around the center
-                    offset_x = int(self.np_random.normal(0, 1.5))  # mean = 0, stddev = 1.5
-                    offset_y = int(self.np_random.normal(0, 1.5))
-                    new_location = (center_x + offset_x, center_y + offset_y)
+                    offset_y = int(self.np_random.normal(0, 1.5))  # mean = 0, stddev = 1.5
+                    offset_x = int(self.np_random.normal(0, 1.5))
+                    new_location = (center_y + offset_y, center_x + offset_x)  # Corrected order to (y, x)
 
                     # Ensure the new location is within grid bounds and not excluded
                     if (0 <= new_location[0] < self.size and
@@ -484,6 +499,7 @@ class ForagingEnvironment(AECEnv):
 
         else:
             raise ValueError("Unsupported distribution type. Choose 'uniform' or 'clustered'.")
+
 
 
     # Below are functions related to the foraging aspects of the simulation
