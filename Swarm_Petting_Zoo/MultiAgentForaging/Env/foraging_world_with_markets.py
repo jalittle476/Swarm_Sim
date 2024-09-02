@@ -100,7 +100,7 @@ class ForagingEnvironmentWithMarkets(ForagingEnvironment):
                 self.steps_remaining_in_direction[agent] -= 1
             else:
                 # Choose a new direction using the Lévy walk
-                current_direction = self.levy_walk_direction(self.current_direction[agent],agent)
+                current_direction = self.levy_walk_direction(agent,self.current_direction[agent])
                 self.current_direction[agent] = current_direction
                 self.steps_remaining_in_direction[agent] = int(self.rng.pareto(self.beta))  # Update steps to persist
 
@@ -126,41 +126,43 @@ class ForagingEnvironmentWithMarkets(ForagingEnvironment):
 
         
     def levy_walk_direction(self, agent, current_direction):
-        """Generate a direction for a Lévy walk in a grid world, given single-step movement constraints."""
+        """Generate a direction for a Lévy walk in a grid world with a bias towards forward movement.
+        
+        Args:
+            current_direction (np.array): The current direction in which the agent is moving.
+            agent: The agent for which to compute the new direction.
+        
+        Returns:
+            np.array: The next direction for the agent to move in.
+        """
         
         # Lévy flight parameters
         beta = self.beta  # Lévy exponent (1 < beta <= 2)
         step_length = int(self.rng.pareto(beta))  # Lévy distributed step length, converted to an integer
 
         # Possible directions in the grid (up, down, left, right)
-        grid_directions = {
-            "up": np.array([0, 1]),
-            "down": np.array([0, -1]),
-            "left": np.array([-1, 0]),
-            "right": np.array([1, 0])
-        }
+        grid_directions = [
+            np.array([0, 1]),   # up
+            np.array([0, -1]),  # down
+            np.array([-1, 0]),  # left
+            np.array([1, 0])    # right
+        ]
 
-        # Determine the base angle of the current direction
-        base_angle = np.arctan2(current_direction[1], current_direction[0])
+        # Bias parameter: probability of continuing in the same direction
+        forward_bias = 0.7  # Adjust this value between 0 and 1 for more or less bias
 
-        # Bias the angle to prioritize forward movement within a certain range
-        forward_bias_range = np.pi / 4  # Example: +/- 45 degrees around the current direction
-        new_angle = self.rng.uniform(base_angle - forward_bias_range, base_angle + forward_bias_range)
+        # Decide whether to continue in the current direction or choose a new one
+        if self.rng.uniform(0, 1) < forward_bias:
+            # Continue in the current direction
+            new_direction = current_direction
+        else:
+            # Choose a new random direction different from the current one
+            new_direction = self.rng.choice([d for d in grid_directions if not np.array_equal(d, current_direction)])
 
-        # Determine the closest grid direction based on the biased angle
-        cos_angle = np.cos(new_angle)
-        sin_angle = np.sin(new_angle)
-
-        if abs(cos_angle) > abs(sin_angle):  # More horizontal movement
-            direction = grid_directions["right"] if cos_angle > 0 else grid_directions["left"]
-        else:  # More vertical movement
-            direction = grid_directions["up"] if sin_angle > 0 else grid_directions["down"]
-
-        # Store the number of steps to persist in this direction
+        # Store the number of steps to persist in this direction for the specific agent
         self.steps_remaining_in_direction[agent] = step_length  # Persist for 'step_length' moves
 
-        return direction
-
+        return new_direction
 
 
     def manhattan_distance(self, a, b):
