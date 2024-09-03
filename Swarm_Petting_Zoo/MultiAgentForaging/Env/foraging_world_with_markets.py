@@ -167,7 +167,6 @@ class ForagingEnvironmentWithMarkets(ForagingEnvironment):
         """Decide on an action for the agent based on its state and log the state."""
         observation = self.observe(agent)
         battery_level = observation['battery_level']
-        self.min_battery_level = 20  # Threshold for returning to base
         carrying = self.get_carrying(agent)
 
         # Update the agent color whenever a decision is made
@@ -293,19 +292,35 @@ class ForagingEnvironmentWithMarkets(ForagingEnvironment):
         
         return observation
     
+    # def get_nearby_agents(self, agent):
+    #     nearby_agents = []
+    #     agent_pos = self.get_agent_location(agent)
+        
+    #     # Get FOV corners
+    #     tl_y, tl_x, br_y, br_x = self.get_fov_corners(agent_pos, self.fov)
+
+    #     # Iterate through the grid slice and find nearby agents
+    #     for y in range(tl_y, br_y):
+    #         for x in range(tl_x, br_x):
+    #             for other_agent, other_agent_pos in self._agent_locations.items():
+    #                 if other_agent != agent and np.array_equal(other_agent_pos, [y, x]):
+    #                     nearby_agents.append(other_agent)
+
+    #     return nearby_agents
+    
     def get_nearby_agents(self, agent):
         nearby_agents = []
         agent_pos = self.get_agent_location(agent)
-        
+
         # Get FOV corners
         tl_y, tl_x, br_y, br_x = self.get_fov_corners(agent_pos, self.fov)
 
-        # Iterate through the grid slice and find nearby agents
-        for y in range(tl_y, br_y):
-            for x in range(tl_x, br_x):
-                for other_agent, other_agent_pos in self._agent_locations.items():
-                    if other_agent != agent and np.array_equal(other_agent_pos, [y, x]):
-                        nearby_agents.append(other_agent)
+        # Iterate over other agents to find nearby agents
+        for other_agent, other_agent_pos in self._agent_locations.items():
+            if other_agent != agent:  # Exclude the current agent itself
+                # Check if the other agent is within the FOV bounds
+                if tl_y <= other_agent_pos[0] < br_y and tl_x <= other_agent_pos[1] < br_x:
+                    nearby_agents.append(other_agent)
 
         return nearby_agents
  

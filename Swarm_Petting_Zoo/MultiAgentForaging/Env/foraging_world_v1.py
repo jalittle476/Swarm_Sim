@@ -255,16 +255,17 @@ class ForagingEnvironment(AECEnv):
             )
 
             # Display grid addresses on the simulation grid
-        for x in range(self.size):
-            for y in range(self.size):
-                # Compute the position for the text
-                text_location = (int(pix_square_size * x), int(pix_square_size * y))
-                
-                # Render the grid coordinates as text
-                text_surface = font.render(f'({x}, {y})', True, (0,0,0))  # White text
-                
-                # Blit (draw) the text surface onto the canvas
-                canvas.blit(text_surface, text_location)
+        if self.show_grid_addresses:
+            for x in range(self.size):
+                for y in range(self.size):
+                    # Compute the position for the text
+                    text_location = (int(pix_square_size * x), int(pix_square_size * y))
+                    
+                    # Render the grid coordinates as text
+                    text_surface = font.render(f'({x}, {y})', True, (0,0,0))  # White text
+                    
+                    # Blit (draw) the text surface onto the canvas
+                    canvas.blit(text_surface, text_location)
 
         # Draw the agents
         for agent, location in self._agent_locations.items():
