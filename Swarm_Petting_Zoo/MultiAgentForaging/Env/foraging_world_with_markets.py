@@ -88,7 +88,8 @@ class ForagingEnvironmentWithMarkets(ForagingEnvironment):
 
         # Determine the current direction for the agent
         if search_pattern == "levy_walk" and not visible_resources:
-            if self.steps_remaining_in_direction[agent] > 0:
+            next_location = agent_location + self.current_direction[agent]
+            if self.steps_remaining_in_direction[agent] > 0 and self._is_location_valid(agent, next_location):
                 # Continue in the current direction if steps remain
                 current_direction = self.current_direction[agent]
                 self.steps_remaining_in_direction[agent] -= 1

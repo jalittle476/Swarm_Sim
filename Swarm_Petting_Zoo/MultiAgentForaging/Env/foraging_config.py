@@ -5,8 +5,8 @@ class ForagingConfig:
     
     #Environment Configuration
     seed: int = 255
-    num_agents: int = 100
-    size: int = 100
+    num_agents: int = 10
+    size: int = 20
     num_resources: int = size**2 // 2
     fov: int = 2
     show_fov: bool = False
