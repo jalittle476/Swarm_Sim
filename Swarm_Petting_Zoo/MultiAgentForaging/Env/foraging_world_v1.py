@@ -31,6 +31,9 @@ class ForagingEnvironment(AECEnv):
         # Initialize the grid
         self.grid = np.zeros((self.size, self.size), dtype=int)
         
+        #Initialize the home base location
+        self._home_base_location = np.array([self.size // 2, self.size // 2])
+        
         # Initialize the possible agents
         self.possible_agents = [f"agent_{i}" for i in range(config.num_agents)]
         self.agent_selection = self.possible_agents[0]
@@ -79,7 +82,6 @@ class ForagingEnvironment(AECEnv):
         self.grid.fill(0)
         
          # Home base is at the center of the grid
-        self._home_base_location = np.array([self.size // 2, self.size // 2])
         self.grid[self._home_base_location[0], self._home_base_location[1]] = -1  # Mark the home base
         
        # Initialize agent locations and update the grid
@@ -148,7 +150,7 @@ class ForagingEnvironment(AECEnv):
         if not self._is_location_valid(agent, new_location):
             new_location = self._simple_avoidance(agent, direction)
         
-         # Update the agent's location using the optimized function
+         # Update the agent's location 
         self.update_agent_location(agent, new_location)
         
         # Handle resource collection if the agent is on a resource location
@@ -181,7 +183,6 @@ class ForagingEnvironment(AECEnv):
 
         return observation, reward, terminated, truncation, info
 
-    
     def _is_location_valid(self, agent, location):
         """Check if a location is valid for an agent to move to."""
         # Ensure the location is within the grid boundaries
@@ -508,8 +509,6 @@ class ForagingEnvironment(AECEnv):
         else:
             raise ValueError("Unsupported distribution type. Choose 'uniform' or 'clustered'.")
 
-
-
     # Below are functions related to the foraging aspects of the simulation
 
     def get_carrying(self, agent):
@@ -579,3 +578,6 @@ class ForagingEnvironment(AECEnv):
         if new_location not in self.occupied_locations:
             self.occupied_locations[new_location] = set()
         self.occupied_locations[new_location].add(agent)
+        
+    
+

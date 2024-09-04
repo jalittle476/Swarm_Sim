@@ -17,9 +17,9 @@ def test_auction_subclass_features(step_limit=5):
             # Decide and execute the action
             action = env.decide_action(agent)
 
-            # # For testing: Trigger an auction process with a random seller agent
-            # if action is not None and agent == 'agent_0':  # Trigger auction for testing
-            #     env.initiate_auction(agent)
+            # For testing: Trigger an auction process with a random seller agent
+            if action is not None and agent == 'agent_0':  # Trigger auction for testing
+                env.initiate_auction(agent)
             
         env.step(action)
         

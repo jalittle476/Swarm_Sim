@@ -14,6 +14,7 @@ class ForagingEnvironmentWithMarkets(ForagingEnvironment):
         self.__dict__.update(config.__dict__)
 
     def initialize_agents(self):
+        
         self._money = {agent: self.initial_money for agent in self.agents}
         
         # Initialize the state of each agent
