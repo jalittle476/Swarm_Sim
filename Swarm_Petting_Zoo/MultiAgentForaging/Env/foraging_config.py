@@ -20,7 +20,7 @@ class ForagingConfig:
     full_battery_charge: int = 2 * size  #could make it to the corners and back
     agent_to_visualize: str = "agent_0"
     distribution_type: str = "clustered"
-    num_clusters: int = 5
+    num_clusters: int = 20
     
     #Agent initial configuration
     

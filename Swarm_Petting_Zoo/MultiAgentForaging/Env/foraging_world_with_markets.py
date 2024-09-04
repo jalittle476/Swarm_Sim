@@ -292,22 +292,6 @@ class ForagingEnvironmentWithMarkets(ForagingEnvironment):
         
         return observation
     
-    # def get_nearby_agents(self, agent):
-    #     nearby_agents = []
-    #     agent_pos = self.get_agent_location(agent)
-        
-    #     # Get FOV corners
-    #     tl_y, tl_x, br_y, br_x = self.get_fov_corners(agent_pos, self.fov)
-
-    #     # Iterate through the grid slice and find nearby agents
-    #     for y in range(tl_y, br_y):
-    #         for x in range(tl_x, br_x):
-    #             for other_agent, other_agent_pos in self._agent_locations.items():
-    #                 if other_agent != agent and np.array_equal(other_agent_pos, [y, x]):
-    #                     nearby_agents.append(other_agent)
-
-    #     return nearby_agents
-    
     def get_nearby_agents(self, agent):
         nearby_agents = []
         agent_pos = self.get_agent_location(agent)

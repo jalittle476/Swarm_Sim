@@ -39,6 +39,9 @@ class ForagingEnvironment(AECEnv):
         # Initialize the cache for agent colors
         self.agent_color_cache = {}  # A dictionary to store the colors of agents
 
+        self.occupied_locations = {}  # Dictionary to store sets of agents at each location
+
+
         # Initialize agent colors for all agents
         for agent_id in range(self.num_agents):
             agent_name = f"agent_{agent_id}"
@@ -144,11 +147,9 @@ class ForagingEnvironment(AECEnv):
         # Validate the new location and possibly avoid collisions
         if not self._is_location_valid(agent, new_location):
             new_location = self._simple_avoidance(agent, direction)
-            
-        # Update the grid: remove the agent from the old location
-        self.grid[self._agent_locations[agent][0], self._agent_locations[agent][1]] = 0
-        self._agent_locations[agent] = np.clip(new_location, 0, self.size - 1)
-        self.grid[self._agent_locations[agent][0], self._agent_locations[agent][1]] = 1  # Mark the new location
+        
+         # Update the agent's location using the optimized function
+        self.update_agent_location(agent, new_location)
         
         # Handle resource collection if the agent is on a resource location
         agent_location = tuple(self._agent_locations[agent])  # Convert agent location to a tuple
@@ -231,11 +232,12 @@ class ForagingEnvironment(AECEnv):
         font = pygame.font.SysFont('Arial', 12)  # Adjust the font size as needed
 
         # Draw the home base
+        home_base_pos = (int(pix_square_size * self._home_base_location[1]), int(pix_square_size * self._home_base_location[0]))
         pygame.draw.rect(
             canvas,
             (102, 51, 0),
             pygame.Rect(
-                pix_square_size * self._home_base_location,
+                home_base_pos,
                 (pix_square_size, pix_square_size),
             ),
         )
@@ -271,16 +273,15 @@ class ForagingEnvironment(AECEnv):
         for agent, location in self._agent_locations.items():
             # Use cached color
             agent_color = self.agent_color_cache[agent]
-
+            agent_pos = ((location + 0.5) * pix_square_size).astype(int)
             pygame.draw.circle(
                 canvas,
                 agent_color,
-                (location + 0.5) * pix_square_size,
+                agent_pos,
                 pix_square_size / 3,
             )
 
             if self.draw_numbers:
-                font = pygame.font.SysFont(None, 20)
                 text_surface = font.render(str(agent), True, (0, 0, 0))
                 text_position = (
                     (location[0] + 0.3) * pix_square_size,
@@ -308,24 +309,30 @@ class ForagingEnvironment(AECEnv):
 
         # Visualize the FOV
         if self.show_fov:
+            fov_surface = pygame.Surface((self.window_size, self.window_size), pygame.SRCALPHA)
+            fov_color = (100, 100, 255, 80)
+            
             current_agent_location = self._agent_locations[self.agent_to_visualize]
             tl_x = max(0, current_agent_location[0] - self.fov)
             tl_y = max(0, current_agent_location[1] - self.fov)
             br_x = min(self.size, current_agent_location[0] + self.fov + 1)
             br_y = min(self.size, current_agent_location[1] + self.fov + 1)
 
-            fov_surface = pygame.Surface((self.window_size, self.window_size), pygame.SRCALPHA)
-            fov_color = (100, 100, 255, 80)
-
-            for x in range(tl_x, br_x):
-                for y in range(tl_y, br_y):
-                    pygame.draw.rect(fov_surface, fov_color, pygame.Rect(pix_square_size * np.array([x, y]), (pix_square_size, pix_square_size)))
+            
+            
+            pygame.draw.rect(
+                fov_surface,
+                fov_color,
+                pygame.Rect(
+                    (tl_x * pix_square_size, tl_y * pix_square_size),
+                    ((br_x - tl_x) * pix_square_size, (br_y - tl_y) * pix_square_size),
+                ),
+            )
 
             canvas.blit(fov_surface, (0, 0))
 
         # Display number of active agents
         num_active_agents = sum(not terminated for terminated in self.terminations.values())
-        font = pygame.font.SysFont(None, 24)
         text_surface = font.render(f'Active Agents: {num_active_agents}', True, (0, 0, 0))
         text_position = (10, 10)
         canvas.blit(text_surface, text_position)
@@ -540,10 +547,35 @@ class ForagingEnvironment(AECEnv):
         return np.array_equal(location, self._home_base_location)
 
     def _is_occupied_by_agent(self, location, exclude_agent=None):
-        """Check if the location is occupied by an agent, excluding a specific agent if needed."""
-        for other_agent, agent_location in self._agent_locations.items():
-            if other_agent != exclude_agent and np.array_equal(location, agent_location):
-                if self.consider_dead_agents_as_obstacles or not self.terminations[other_agent]:
-                    return True  # The location is occupied by another agent
-        return False  # The location is not occupied
+        """Check if the location is occupied by any agent, excluding a specific agent if needed."""
+
+        location = tuple(location)  # Ensure the location is a tuple
+
+        # Fast check using the dictionary
+        if location in self.occupied_locations:
+            if exclude_agent:
+                # Check if any other agent occupies the location
+                return any(agent != exclude_agent for agent in self.occupied_locations[location])
+            return True  # Location is occupied by one or more agents
+
+        return False  # Location is not occupied
     
+    def update_agent_location(self, agent, new_location):
+        """Update the location of an agent and manage the dictionary of occupied locations."""
+        old_location = tuple(self._agent_locations[agent])  # Convert old location to tuple
+
+        # Remove the agent from the old location
+        if old_location in self.occupied_locations:
+            self.occupied_locations[old_location].discard(agent)  # Use discard to safely remove without KeyError
+            # If no agents remain at the old location, remove the entry from the dictionary
+            if not self.occupied_locations[old_location]:
+                del self.occupied_locations[old_location]
+
+        # Update the agent's location
+        self._agent_locations[agent] = new_location
+        new_location = tuple(new_location)
+
+        # Add the agent to the new location
+        if new_location not in self.occupied_locations:
+            self.occupied_locations[new_location] = set()
+        self.occupied_locations[new_location].add(agent)
