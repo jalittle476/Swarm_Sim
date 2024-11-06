@@ -20,6 +20,14 @@ class ForagingEnvironmentWithMarkets(ForagingEnvironment):
         # Initialize the state of each agent
         self.agent_states = {agent: "Foraging" for agent in self.agents}  # Default state is "Foraging"
         
+          # Initialize auction-related attributes
+        self._exchange_seller = None
+        self._exchange_buyer = None
+        self._exchange_bid = None
+        
+        # Initialize target locations for exchange
+        self._target_location = {}  # Empty dictionary to store target locations for each agent during exchanges
+        
         """Initialize direction and steps remaining for each agent."""
         grid_directions = [np.array([0, 1]), np.array([0, -1]), np.array([-1, 0]), np.array([1, 0])]  # Up, Down, Left, Right
 
@@ -85,6 +93,7 @@ class ForagingEnvironmentWithMarkets(ForagingEnvironment):
         """Generate an action to return the agent to the base."""
         if np.array_equal(agent_location, base_location):
             return None  # No action needed, agent is already at the base
+        
         direction_to_base = self.calculate_direction(agent_location, base_location)
         action = self.gaussian_sample(direction_to_base, self.std_dev_base_return)
         
@@ -180,6 +189,30 @@ class ForagingEnvironmentWithMarkets(ForagingEnvironment):
         """Calculate the Manhattan distance between two points."""
         return abs(a[0] - b[0]) + abs(a[1] - b[1])
 
+    # def decide_action(self, agent):
+    #     """Decide on an action for the agent based on its state and log the state."""
+    #     observation = self.observe(agent)
+    #     battery_level = observation['battery_level']
+    #     carrying = self.get_carrying(agent)
+
+    #     # Update the agent color whenever a decision is made
+    #     self._update_agent_color(agent)
+
+    #     # Determine state based on conditions
+    #     if carrying or self.should_return_to_base(battery_level, self.min_battery_level):
+    #         state = "Returning to Base"
+    #         action = self.return_to_base(self.get_agent_location(agent), self.get_home_base_location())
+    #         if action is not None:
+    #             self.log_agent_state(agent, observation, state)
+    #             return action
+
+    #     # Default state: Foraging
+    #     state = "Foraging"
+    #     action = self.foraging_behavior(agent, observation, self.search_pattern)
+
+    #     self.log_agent_state(agent, observation, state)
+    #     return action
+    
     def decide_action(self, agent):
         """Decide on an action for the agent based on its state and log the state."""
         observation = self.observe(agent)
@@ -189,20 +222,29 @@ class ForagingEnvironmentWithMarkets(ForagingEnvironment):
         # Update the agent color whenever a decision is made
         self._update_agent_color(agent)
 
-        # Determine state based on conditions
+        # Check if the agent is in an auction exchange state
+        if agent in [self._exchange_seller, self._exchange_buyer]:
+            # Set state to Exchanging and move toward the other agent
+            self.agent_states[agent] = "Exchanging"  # Store state in agent_states
+            action = self.execute_exchange(agent)  # Call the exchange function to handle movement and completion
+            self.log_agent_state(agent, observation, "Exchanging")
+            return action
+
+        # Check if the agent should return to base
         if carrying or self.should_return_to_base(battery_level, self.min_battery_level):
-            state = "Returning to Base"
+            self.agent_states[agent] = "Returning to Base"
             action = self.return_to_base(self.get_agent_location(agent), self.get_home_base_location())
             if action is not None:
-                self.log_agent_state(agent, observation, state)
+                self.log_agent_state(agent, observation, "Returning to Base")
                 return action
 
         # Default state: Foraging
-        state = "Foraging"
+        self.agent_states[agent] = "Foraging"
         action = self.foraging_behavior(agent, observation, self.search_pattern)
-
-        self.log_agent_state(agent, observation, state)
+        self.log_agent_state(agent, observation, "Foraging")
         return action
+
+
     
     def log_agent_state(self, agent, observation, state):
         """Log the agent's state, location, and other important details."""
@@ -247,6 +289,21 @@ class ForagingEnvironmentWithMarkets(ForagingEnvironment):
         new_observation = self.observe(agent)
         
         return new_observation, reward, terminated, truncation, info
+    
+    def adjust_currency(self, agent, amount):
+        """Adjust the agent's currency by the specified amount."""
+        if agent not in self._money:
+            self._money[agent] = 0  # Initialize the agent's money if not already done
+
+        # Update the agent's currency
+        self._money[agent] += amount
+
+        # Ensure currency doesn't drop below zero if that rule is desired
+        if self._money[agent] < 0:
+            self._money[agent] = 0  # Prevent negative currency balance
+
+        print(f"Agent {agent} currency adjusted by {amount}. New balance: {self._money[agent]}")
+
 
     def _decrement_battery(self, agent):
         """Decrement the battery level of an agent."""
@@ -348,7 +405,7 @@ class ForagingEnvironmentWithMarkets(ForagingEnvironment):
         # Collect bids from nearby agents
         bids = {}
         for agent in nearby_agents:
-            bid = self.calculate_bid(agent, seller_agent)
+            bid = self.calculate_bid(agent)
             if bid > reserve_price:
                 bids[agent] = bid
 
@@ -360,8 +417,43 @@ class ForagingEnvironmentWithMarkets(ForagingEnvironment):
             self._exchange_buyer = winning_agent
             self._exchange_bid = winning_bid
             print(f"{winning_agent} wins the auction with a bid of {winning_bid}. Preparing for exchange.")
-        else:
-            print(f"No bids higher than the reserve price. Auction failed.")
+        # else:
+            # print(f"No bids higher than the reserve price. Auction failed.")
+
+    def execute_exchange(self, agent):
+        """Handle the agent's movement toward the other agent and complete the exchange if they meet."""
+        # Identify the target agent for the exchange
+        target_agent = self._exchange_buyer if agent == self._exchange_seller else self._exchange_seller
+        target_location = self.get_agent_location(target_agent)
+        agent_location = self.get_agent_location(agent)
+
+        # Calculate the direction towards the target agent
+        direction_to_target = self.calculate_direction(agent_location, target_location)
+        action = self.gaussian_sample(direction_to_target, self.std_dev_move)
+
+        # Check if the agents have met to complete the exchange
+        if np.array_equal(agent_location, target_location):
+            self.complete_exchange()  # Call a function to complete the exchange
+            # Reset the exchange state after completion
+            self._exchange_seller = None
+            self._exchange_buyer = None
+            self._exchange_bid = None  # Clear the bid if needed
+            self._target_location.pop(agent, None)
+            self._target_location.pop(target_agent, None)
+        
+        return action
+    
+    def complete_exchange(self):
+        """Handle the resource and currency exchange between the seller and buyer."""
+        # Transfer resource from seller to buyer
+        self._carrying[self._exchange_buyer] = True
+        self._carrying[self._exchange_seller] = False
+
+        # Adjust currency for the transaction
+        self.adjust_currency(self._exchange_buyer, -self._exchange_bid)
+        self.adjust_currency(self._exchange_seller, self._exchange_bid)
+
+        print(f"Exchange completed between {self._exchange_seller} and {self._exchange_buyer}.")
 
     def calculate_reserve_price(self, agent):
         """Calculate the minimum selling price based on the agent's utility and the home base resource reward."""
@@ -421,8 +513,25 @@ class ForagingEnvironmentWithMarkets(ForagingEnvironment):
         else:
             return float('inf')  # No visible resources
 
-    def execute_transaction(self, seller_agent, buyer_agent, bid):
-        # Placeholder for transaction logic
-        print(f"{buyer_agent} wins the auction with a bid of {bid}.")
-        
-    
+    def _update_agent_color(self, agent):
+        """
+        Update the color of the agent based on its current state.
+        This function is called only when the agent's state changes.
+        """
+        # Retrieve the agent's current state
+        agent_state = self.agent_states[agent]
+
+        if agent_state == "Exchanging":
+            self.agent_color_cache[agent] = (255, 105, 180)  # Pink for exchange state
+        elif agent_state == "Returning to Base" and self._battery_level[agent] == 0:
+            self.agent_color_cache[agent] = (0, 0, 0)  # Black for zero battery while returning
+        elif agent_state == "Returning to Base" and self._battery_level[agent] < self.size:
+            self.agent_color_cache[agent] = (255, 0, 0)  # Red for low battery while returning
+        elif agent_state == "Returning to Base" and self._carrying[agent]:
+            self.agent_color_cache[agent] = (0, 102, 0)  # Green if carrying a resource while returning
+        else:
+            self.agent_color_cache[agent] = (0, 0, 255)  # Blue for foraging or other default state
+
+
+
+
