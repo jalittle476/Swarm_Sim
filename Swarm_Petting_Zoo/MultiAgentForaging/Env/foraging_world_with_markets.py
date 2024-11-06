@@ -60,6 +60,22 @@ class ForagingEnvironmentWithMarkets(ForagingEnvironment):
             return 0 if sampled_direction[0] > 0 else 2  # Move right or left
         else:
             return 1 if sampled_direction[1] > 0 else 3  # Move down or up
+        
+    def move_towards_location(self, agent_location, target_location):
+        """Generate an action to move the agent towards a specified target location."""
+        if np.array_equal(agent_location, target_location):
+            return None  # No movement needed, agent is already at the target location
+
+        direction_to_target = self.calculate_direction(agent_location, target_location)
+        action = self.gaussian_sample(direction_to_target, self.std_dev_move)
+
+        # If the action results in no movement, handle it here
+        if action is None:
+            if self.debug:
+                print(f"Agent at {agent_location} chose not to move towards target at {target_location}.")
+            return None
+
+        return action
 
     def should_return_to_base(self, battery_level, min_battery_level):
         """Check if the agent should return to the base based on its battery level."""
@@ -159,7 +175,6 @@ class ForagingEnvironmentWithMarkets(ForagingEnvironment):
         self.steps_remaining_in_direction[agent] = step_length  # Persist for 'step_length' moves
 
         return new_direction
-
 
     def manhattan_distance(self, a, b):
         """Calculate the Manhattan distance between two points."""
@@ -348,7 +363,6 @@ class ForagingEnvironmentWithMarkets(ForagingEnvironment):
         else:
             print(f"No bids higher than the reserve price. Auction failed.")
 
-
     def calculate_reserve_price(self, agent):
         """Calculate the minimum selling price based on the agent's utility and the home base resource reward."""
         observation = self.observe(agent)
@@ -365,7 +379,7 @@ class ForagingEnvironmentWithMarkets(ForagingEnvironment):
         
         return max(1, reserve_price)  # Ensure reserve price is at least 1
 
-    def calculate_bid(self, agent, seller_agent):
+    def calculate_bid(self, agent):
         """Calculate the bid price based on the agent's utility and the potential profit at the home base."""
         observation = self.observe(agent)
         battery_level = observation["battery_level"]
@@ -379,7 +393,8 @@ class ForagingEnvironmentWithMarkets(ForagingEnvironment):
         # Example formula combining these factors
         bid_price = (battery_level * 0.3) + (1 / (distance_to_resources + 1)) * 8 + (local_density * 1.5) + opportunity_cost + potential_profit * 0.5
         
-        return max(1, bid_price)  # Ensure bid price is at least 1
+        # return max(1, round(bid_price))  # Ensure bid price is at least 1
+        return min(self._money[agent], max(1, round(bid_price)))
 
     def calculate_opportunity_cost(self, agent, selling):
         """Estimate opportunity cost based on current state."""
@@ -409,3 +424,5 @@ class ForagingEnvironmentWithMarkets(ForagingEnvironment):
     def execute_transaction(self, seller_agent, buyer_agent, bid):
         # Placeholder for transaction logic
         print(f"{buyer_agent} wins the auction with a bid of {bid}.")
+        
+    

@@ -8,9 +8,6 @@ import numpy as np
 import pygame
 import random 
 
-
-## Foraging World Without Communication
-
 class ForagingEnvironment(AECEnv):
     metadata = {"name": "foraging_environment_v0", "render_fps": 1000}
 
@@ -546,18 +543,20 @@ class ForagingEnvironment(AECEnv):
         return np.array_equal(location, self._home_base_location)
 
     def _is_occupied_by_agent(self, location, exclude_agent=None):
-        """Check if the location is occupied by any agent, excluding a specific agent if needed."""
+        """Check if the location is occupied by any active agent, excluding a specific agent if needed."""
 
         location = tuple(location)  # Ensure the location is a tuple
 
         # Fast check using the dictionary
         if location in self.occupied_locations:
-            if exclude_agent:
-                # Check if any other agent occupies the location
-                return any(agent != exclude_agent for agent in self.occupied_locations[location])
-            return True  # Location is occupied by one or more agents
+            for agent in self.occupied_locations[location]:
+                # Skip the excluded agent and any terminated agents
+                if agent == exclude_agent or self.terminations.get(agent, False):
+                    continue
+                return True  # Found an active agent occupying the location
 
-        return False  # Location is not occupied
+        return False  # Location is not occupied by any active agent
+
     
     def update_agent_location(self, agent, new_location):
         """Update the location of an agent and manage the dictionary of occupied locations."""

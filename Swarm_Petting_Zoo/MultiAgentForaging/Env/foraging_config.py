@@ -5,10 +5,10 @@ class ForagingConfig:
     
     #Environment Configuration
     seed: int = 255
-    num_agents: int = 10
-    size: int = 20
+    num_agents: int = 20
+    size: int = 50
     num_resources: int = size**2 // 2
-    fov: int = 2
+    fov: int = 3
     show_fov: bool = False
     show_gridlines: bool = False
     show_grid_addresses: bool = False
@@ -20,7 +20,7 @@ class ForagingConfig:
     full_battery_charge: int = 2 * size  #could make it to the corners and back
     agent_to_visualize: str = "agent_0"
     distribution_type: str = "clustered"
-    num_clusters: int = 20
+    num_clusters: int = 10
     
     #Agent initial configuration
     

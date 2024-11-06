@@ -3,7 +3,7 @@ from foraging_world_with_markets import ForagingEnvironmentWithMarkets
 from foraging_config import ForagingConfig
 import time
 
-def test_auction_subclass_features(step_limit=5):
+def test_markets(step_limit=5):
     # Initialize the environment with the auction subclass
     env = ForagingEnvironmentWithMarkets(config=ForagingConfig())
     env.reset(seed=42)
@@ -18,8 +18,8 @@ def test_auction_subclass_features(step_limit=5):
             action = env.decide_action(agent)
 
             # # For testing: Trigger an auction process with a random seller agent
-            # if action is not None and agent == 'agent_0':  # Trigger auction for testing
-            #     env.initiate_auction(agent)
+            if action is not None and agent == 'agent_0':  # Trigger auction for testing
+                env.initiate_auction(agent)
             
         env.step(action)
         
@@ -39,4 +39,4 @@ def test_auction_subclass_features(step_limit=5):
     env.close()
 
 if __name__ == "__main__":
-    test_auction_subclass_features()
+    test_markets()
