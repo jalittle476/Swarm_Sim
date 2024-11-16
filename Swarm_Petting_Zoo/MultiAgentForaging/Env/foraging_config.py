@@ -6,8 +6,8 @@ class ForagingConfig:
     #Environment Configuration
     seed: int = 255
     num_agents: int = 20
-    size: int = 50
-    num_resources: int = size**2 // 2
+    size: int = 40
+    num_resources: int = 800
     fov: int = 3
     show_fov: bool = False
     show_gridlines: bool = False

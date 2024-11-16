@@ -18,8 +18,8 @@ def test_markets(step_limit=5):
             action = env.decide_action(agent)
 
             # # For testing: Trigger an auction process with a random seller agent
-            if action is not None and agent == 'agent_0':  # Trigger auction for testing
-                env.initiate_auction(agent)
+            # if action is not None and agent == 'agent_0':  # Trigger auction for testing
+            #     env.initiate_auction(agent)
             
         env.step(action)
         
@@ -35,7 +35,7 @@ def test_markets(step_limit=5):
         
         env.render()
         #time.sleep(1)
-
+    env.save_logs("simulation_logs.csv")
     env.close()
 
 if __name__ == "__main__":

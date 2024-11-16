@@ -112,7 +112,6 @@ class ForagingEnvironment(AECEnv):
         self._agent_selector = agent_selector(self.agents)
         self.agent_selection = self._agent_selector.next()
 
-
     def step(self, action):
         agent = self.agent_selection  # Get the current agent
 
