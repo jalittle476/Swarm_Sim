@@ -11,11 +11,11 @@ def test_markets(step_limit=5):
     for agent in env.agent_iter():
         observation, reward, termination, truncation, info = env.last(agent)
 
-        if termination or truncation:
-            action = None
-        else:
+        # if termination or truncation:
+        #     action = None
+        # else:
             # Decide and execute the action
-            action = env.decide_action(agent)
+        action = env.decide_action(agent)
 
             # # For testing: Trigger an auction process with a random seller agent
             # if action is not None and agent == 'agent_0':  # Trigger auction for testing

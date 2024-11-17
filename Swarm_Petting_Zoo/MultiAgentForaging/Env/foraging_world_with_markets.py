@@ -53,9 +53,13 @@ class ForagingEnvironmentWithMarkets(ForagingEnvironment):
         # Simple linear scaling of threshold based on local density
         adjusted_threshold = min(base_threshold + local_density, max_threshold)
         return adjusted_threshold
-
+        
     def gaussian_sample(self, direction, std_dev):
         """Sample a discrete action based on the direction vector with added Gaussian noise."""
+        
+        # Ensure direction is a 2D vector
+        if not isinstance(direction, np.ndarray) or direction.shape != (2,):
+            raise ValueError(f"Direction must be a 2D vector. Received: {direction}")
 
         # Normalize the direction vector
         norm = np.linalg.norm(direction)
@@ -72,7 +76,7 @@ class ForagingEnvironmentWithMarkets(ForagingEnvironment):
             return 0 if sampled_direction[0] > 0 else 2  # Move right or left
         else:
             return 1 if sampled_direction[1] > 0 else 3  # Move down or up
-        
+    
     def move_towards_location(self, agent_location, target_location):
         """Generate an action to move the agent towards a specified target location."""
         if np.array_equal(agent_location, target_location):
@@ -195,56 +199,44 @@ class ForagingEnvironmentWithMarkets(ForagingEnvironment):
         # Update the agent color whenever a decision is made
         self._update_agent_color(agent)
         
-        if self.agent_states[agent] == "Dead":
-            print(f"Agent {agent} died.")
-            action = self.return_to_base(self.get_agent_location(agent), self.get_home_base_location())
-            self.log_agent_data(agent)
-            return action
+        # Determine the action based on conditions
+        # if (battery_level <= 0):
+        #     self.agent_states[agent] = "Dead"
+        #     if not carrying:
+        #         # print(f"Agent {agent} died while foraging.")
+        #         action = None
+        #     if carrying:
+        #         # print(f"Agent {agent} died while returning to base.")
+        #         action = None
         
-        if (battery_level <= 0) and (not carrying):
-            self.agent_states[agent] = "Dead"
-            print(f"Agent {agent} died while foraging.")
-            action = self.return_to_base(self.get_agent_location(agent), self.get_home_base_location())
-            self.log_agent_data(agent)
-            return action
-        
-        if (battery_level <= 0) and carrying:
-            print(f"Agent {agent} died while returning to base with a resource.")
-            self.agent_states[agent] = "Dead"
-            action = self.return_to_base(self.get_agent_location(agent), self.get_home_base_location())
-            self.log_agent_data(agent)
-            return action
-
-        # Check if the agent is in an auction exchange state
+                
+            
         if agent in [self._exchange_seller, self._exchange_buyer]:
-            # Set state to Exchanging and move toward the other agent
-            self.agent_states[agent] = "Exchanging"  # Store state in agent_states
-            action = self.execute_exchange(agent)  # Call the exchange function to handle movement and completion
-            self.log_agent_data(agent)
-
-            return action
-
-        if not carrying and self.should_return_to_base(battery_level, self.min_battery_level):
+            # Agent is in an auction exchange state
+            self.agent_states[agent] = "Exchanging"
+            action = self.execute_exchange(agent)  # Move toward the other agent
+            
+        elif not carrying and self.should_return_to_base(battery_level, self.min_battery_level):
+            # Agent needs to return to base due to low battery
             self.agent_states[agent] = "Returning to Base"
             action = self.return_to_base(self.get_agent_location(agent), self.get_home_base_location())
-            self.log_agent_data(agent)
-
-            return action
-
-        # Check if the agent should return to base
-        if carrying:
-            self.agent_states[agent] = "Returning to Base"
+            
+        elif carrying:
+            # Agent is carrying a resource and returning to base
             action = self.return_to_base(self.get_agent_location(agent), self.get_home_base_location())
-            self.initiate_auction(agent)  # Initiate an auction process when returning with a resource
-            self.log_agent_data(agent)
-            return action
+            if agent not in [self._exchange_seller, self._exchange_buyer]:
+                self.agent_states[agent] = "Returning to Base"
+                self.initiate_auction(agent)  # Initiate an auction process for the agent
+                
+        else:
+            # Default state: Foraging
+            self.agent_states[agent] = "Foraging"
+            action = self.foraging_behavior(agent, observation, self.search_pattern)
 
-        # Default state: Foraging
-        self.agent_states[agent] = "Foraging"
-        action = self.foraging_behavior(agent, observation, self.search_pattern)
+        # Log the agent's state after deciding the action
         self.log_agent_data(agent)
-
         return action
+
   
     def log_agent_state(self, agent, observation, state):
         """Log the agent's state, location, and other important details."""
@@ -262,34 +254,77 @@ class ForagingEnvironmentWithMarkets(ForagingEnvironment):
             print(log_msg)
 
     def step(self, action):
-        """Extend the step function to handle purchases and auction functionality."""
-        # Call the base class's step function to maintain existing functionality
+        """Extend the step function to handle purchases, auction functionality, and dead agents returning to base."""
         agent = self.agent_selection  # Get the current agent
         observation, reward, terminated, truncation, info = super().step(action)
 
-        if terminated or truncation:
-            return observation, reward, terminated, truncation, info
+        # Check if the agent is dead and needs to return to the base
+        if self._battery_level[agent] == 0:
+            self.agent_states[agent] = "Dead"
+            
+            if not np.array_equal(self.get_agent_location(agent), self.get_home_base_location()):
+                # Agent is dead and not at the base, so prevent termination to allow movement
+                self.terminations[agent] = False
+                action = self.return_to_base(self.get_agent_location(agent), self.get_home_base_location())
+                self.update_agent_location(agent, self._agent_locations[agent] + self._action_to_direction[action])
+                observation = self.observe(agent)  # Update observation after movement
+            else:
+                # Agent has reached the base, finalize termination
+                self.terminations[agent] = True
+                action = None  # No further actions required
 
-        # Decrement battery after each step
-        self._decrement_battery(agent)
+        # Additional logic for handling living agents
+        elif not terminated and not truncation:
+            # Decrement battery after each step
+            self._decrement_battery(agent)
 
-        # Check if the agent has received a reward (i.e., returned a resource)
-        if reward > 0:
-            self._money[agent] += self.resource_reward
-            reward = 0  # Reset the reward to prevent double counting
-            if self.debug:
-                print(f"Agent {agent} returned a resource and earned {self._resource_reward} money. Total Money: {self._money[agent]}.")
+            # Check if the agent has returned a resource and received a reward
+            if reward > 0:
+                self._money[agent] += self.resource_reward
+                reward = 0  # Reset the reward to prevent double counting
+                if self.debug:
+                    print(f"Agent {agent} returned a resource and earned {self.resource_reward} money. Total Money: {self._money[agent]}.")
 
-        # Battery threshold for recharging
-        if self._battery_level[agent] < self.full_battery_charge * self.battery_recharge_threshold:  # Only recharge if below 50%
-            # Automatically purchase battery charges with available money if at home base
-            if np.array_equal(self.get_agent_location(agent), self.get_home_base_location()):
-                self.purchase_battery_charge(agent)
+            # Handle recharging if at the base and low on battery
+            if self._battery_level[agent] < self.full_battery_charge * self.battery_recharge_threshold:
+                if np.array_equal(self.get_agent_location(agent), self.get_home_base_location()):
+                    self.purchase_battery_charge(agent)
 
         # Ensure all observations and updates are consistent
         new_observation = self.observe(agent)
-        
+
         return new_observation, reward, terminated, truncation, info
+
+
+    # def step(self, action):
+    #     """Extend the step function to handle purchases and auction functionality."""
+    #     # Call the base class's step function to maintain existing functionality
+    #     agent = self.agent_selection  # Get the current agent
+    #     observation, reward, terminated, truncation, info = super().step(action)
+
+    #     if terminated or truncation:
+    #         return observation, reward, terminated, truncation, info
+
+    #     # Decrement battery after each step
+    #     self._decrement_battery(agent)
+
+    #     # Check if the agent has received a reward (i.e., returned a resource)
+    #     if reward > 0:
+    #         self._money[agent] += self.resource_reward
+    #         reward = 0  # Reset the reward to prevent double counting
+    #         if self.debug:
+    #             print(f"Agent {agent} returned a resource and earned {self._resource_reward} money. Total Money: {self._money[agent]}.")
+
+    #     # Battery threshold for recharging
+    #     if self._battery_level[agent] < self.full_battery_charge * self.battery_recharge_threshold:  # Only recharge if below 50%
+    #         # Automatically purchase battery charges with available money if at home base
+    #         if np.array_equal(self.get_agent_location(agent), self.get_home_base_location()):
+    #             self.purchase_battery_charge(agent)
+
+    #     # Ensure all observations and updates are consistent
+    #     new_observation = self.observe(agent)
+        
+    #     return new_observation, reward, terminated, truncation, info
     
     def adjust_currency(self, agent, amount):
         """Adjust the agent's currency by the specified amount."""
@@ -394,8 +429,42 @@ class ForagingEnvironmentWithMarkets(ForagingEnvironment):
         """Calculate the number of agents within the agent's FOV."""
         return len(self.get_nearby_agents(agent))
 
+    # def initiate_auction(self, seller_agent):
+    #     """Initiate an auction and prepare for resource exchange."""
+    #     # Generate the reserve price based on the seller's utility function
+    #     reserve_price = self.calculate_reserve_price(seller_agent)
+
+    #     # Get agents within the seller's FOV
+    #     nearby_agents = self.get_nearby_agents(seller_agent)
+
+    #     # Collect bids from nearby agents
+    #     bids = {}
+    #     for agent in nearby_agents:
+    #         bid = self.calculate_bid(agent)
+    #         if bid > reserve_price:
+    #             bids[agent] = bid
+
+    #     # Determine the highest bid
+    #     if bids:
+    #         winning_agent = max(bids, key=bids.get)
+    #         winning_bid = bids[winning_agent]
+    #         self._exchange_seller = seller_agent
+    #         self._exchange_buyer = winning_agent
+    #         self._exchange_bid = winning_bid
+    #         print(f"{winning_agent} wins the auction with a bid of {winning_bid}. Preparing for exchange.")
+    #     # No bids meet the reserve price; auction fails
+    #         return True
+    #     elif not bids:
+    #         #print(f"No bids higher than the reserve price of {reserve_price}. Auction failed.")
+    #         return False
+    
     def initiate_auction(self, seller_agent):
         """Initiate an auction and prepare for resource exchange."""
+        # Ensure no exchange is currently in progress
+        if self._exchange_seller is not None or self._exchange_buyer is not None:
+            #print(f"Auction blocked for {seller_agent} because an exchange is in progress.")
+            return False
+
         # Generate the reserve price based on the seller's utility function
         reserve_price = self.calculate_reserve_price(seller_agent)
 
@@ -416,14 +485,22 @@ class ForagingEnvironmentWithMarkets(ForagingEnvironment):
             self._exchange_seller = seller_agent
             self._exchange_buyer = winning_agent
             self._exchange_bid = winning_bid
+            self.agent_states[seller_agent] = "Exchanging"
+            self.agent_states[winning_agent] = "Exchanging"
             print(f"{winning_agent} wins the auction with a bid of {winning_bid}. Preparing for exchange.")
-        # No bids meet the reserve price; auction fails
-        if not bids:
+            return True
+        else:
+            # No bids meet the reserve price; auction fails
             #print(f"No bids higher than the reserve price of {reserve_price}. Auction failed.")
-            return None 
+            return False
+
 
     def execute_exchange(self, agent):
         """Handle the agent's movement toward the other agent and complete the exchange if they are adjacent."""
+       
+        if agent == self._exchange_seller:
+            self._carrying[agent] = False  # Treat seller as if they are not carrying a resource
+        
         # Identify the target agent for the exchange
         target_agent = self._exchange_buyer if agent == self._exchange_seller else self._exchange_seller
         target_location = self.get_agent_location(target_agent)
@@ -436,13 +513,13 @@ class ForagingEnvironmentWithMarkets(ForagingEnvironment):
         # Check if agents are adjacent (Manhattan distance of 1)
         manhattan_distance = self.manhattan_distance(agent_location, target_location)
         if manhattan_distance == 1:
+            if agent == self._exchange_seller:
+                self._carrying[agent] = True
             self.complete_exchange()  # Call a function to complete the exchange
             # Reset the exchange state after completion
             self._exchange_seller = None
             self._exchange_buyer = None
             self._exchange_bid = None
-            self._target_location.pop(agent, None)
-            self._target_location.pop(target_agent, None)
 
         return action
     
@@ -465,10 +542,18 @@ class ForagingEnvironmentWithMarkets(ForagingEnvironment):
         return opportunity_cost # Reserve price is equal to the opportunity cost for the seller
 
     def calculate_bid(self, agent):
-        """Calculate the bid price based on the agent's utility and the potential profit at the home base."""
-        opportunity_cost = self.calculate_opportunity_cost(agent, selling=False)
+        """Calculate the bid price based on the agent's utility and the potential profit at the home base,
+        constrained by the agent's available currency."""
         
-        return opportunity_cost  # Bid price is equal to the opportunity cost for the buyer
+        opportunity_cost = self.calculate_opportunity_cost(agent, selling=False)
+        available_money = self._money.get(agent, 0)  # Get the agent's available money, default to 0 if not found
+
+        # Bid should be the minimum of the calculated opportunity cost and available money
+        bid = min(opportunity_cost, available_money)
+        
+       # print(f"Agent {agent} calculated bid: {bid} (Opportunity Cost: {opportunity_cost}, Available Money: {available_money})")
+        return bid
+
 
     def calculate_opportunity_cost(self, agent, selling):
         """Estimate opportunity cost based on current state."""
@@ -479,12 +564,23 @@ class ForagingEnvironmentWithMarkets(ForagingEnvironment):
         battery_level = self.get_battery_level(agent)
         
         if selling: # Calculate opportunity cost for selling
-            risk_coefficient_selling = 1.0  # Adjust this value based on the agent's risk tolerance
-            opportunity_cost_selling = self.battery_charge_cost * ((self.min_battery_level * self.battery_recharge_threshold) / battery_level) * (risk_coefficient_selling)
+            risk_coefficient_selling = 0.5  # Adjust this value based on the agent's risk tolerance
+            opportunity_cost_selling = (
+                self.battery_charge_cost 
+                * (self.min_battery_level / battery_level) 
+                * (risk_coefficient_selling)
+                )
+            
             return opportunity_cost_selling
+        
         else: # Calculate opportunity cost for buying
-            risk_coefficient_buying = 0.5  # Adjust this value based on the agent's risk tolerance
-            opportunity_cost_buying = self.battery_charge_cost * ((self.min_battery_level * self.battery_recharge_threshold) / battery_level) * (1 - risk_coefficient_buying)
+            risk_coefficient_buying = 0.7  # Adjust this value based on the agent's risk tolerance
+            opportunity_cost_buying = (
+            self.battery_charge_cost 
+            * (self.min_battery_level - battery_level) / self.min_battery_level
+            * risk_coefficient_buying
+            )
+            
             return opportunity_cost_buying
 
     def get_battery_level(self, agent):
