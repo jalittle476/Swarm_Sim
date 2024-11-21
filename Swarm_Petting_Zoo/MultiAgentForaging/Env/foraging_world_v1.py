@@ -88,7 +88,7 @@ class ForagingEnvironment(AECEnv):
             self.grid[self._agent_locations[agent][0], self._agent_locations[agent][1]] = 1  # Mark the agent
         
         # Generate resources and update the grid
-        generated_resources = self._generate_resources(self.num_resources, self.distribution_type, self.num_clusters)
+        generated_resources = self._generate_resources(self.num_resources, self.distribution_type)
         self._resources_location = set(map(tuple, generated_resources))
 
         # Update the grid to mark resource locations
@@ -215,6 +215,11 @@ class ForagingEnvironment(AECEnv):
         return self._agent_locations[agent]  # Stay in place if no valid move is found
 
     def _render(self):
+        
+        # If render_mode is None, skip rendering entirely
+        if self.render_mode is None:
+            return
+        
         if self.window is None and self.render_mode == "human":
             self.window = pygame.display.set_mode((self.window_size, self.window_size))
         if self.clock is None and self.render_mode == "human":
@@ -444,19 +449,18 @@ class ForagingEnvironment(AECEnv):
 
         return selected_resource_locations
     
-    def _generate_resources(self, num_resources, distribution_type='uniform', num_clusters=3):
+    def _generate_resources(self, num_resources, distribution_type='uniform'):
         """Generate resource locations on the grid with different distribution types.
 
         Args:
             num_resources (int): Number of resources to generate.
             distribution_type (str): Type of distribution to use ('uniform' or 'clustered').
-            num_clusters (int): Number of clusters for the 'clustered' distribution.
         
         Returns:
             np.ndarray: Array of generated resource locations.
         """
         # Generate a set of all possible locations on the grid
-        all_locations = {(y, x) for y in range(self.size) for x in range(self.size)}  # Corrected to (y, x)
+        all_locations = {(y, x) for y in range(self.size) for x in range(self.size)}
 
         # Exclude agent locations and the home base location
         excluded_locations = set(tuple(loc) for loc in self._agent_locations.values())
@@ -472,29 +476,42 @@ class ForagingEnvironment(AECEnv):
             return selected_resource_locations
 
         elif distribution_type == 'clustered':
-            # Clustered Distribution: Gaussian around random cluster centers
+            # Determine number of clusters based on grid area
+            num_clusters = max(1, int(self.size ** 2 / 50))  # Example: 1 cluster per 50 cells
+            num_clusters = min(num_clusters, len(available_locations))  # Limit to available locations
+
+            # Determine approximate resources per cluster
+            cluster_sizes = [num_resources // num_clusters] * num_clusters
+            for i in range(num_resources % num_clusters):  # Distribute any remaining resources
+                cluster_sizes[i] += 1
+
+            # Shuffle available locations and select random cluster centers
             self.np_random.shuffle(available_locations)
             cluster_centers = available_locations[:num_clusters]
 
             # Initialize a list to store resource locations
             selected_resource_locations = []
 
+            # Define a fixed radius for each cluster
+            cluster_radius = 2  # You can adjust this to control the spread of each cluster
+
             # Generate resources around each cluster center
-            for center in cluster_centers:
-                center_y, center_x = center  # Corrected order to (y, x)
-                cluster_size = num_resources // num_clusters
+            for cluster_index, center in enumerate(cluster_centers):
+                center_y, center_x = center
+                cluster_size = cluster_sizes[cluster_index]
 
                 for _ in range(cluster_size):
-                    # Generate Gaussian-distributed offsets around the center
-                    offset_y = int(self.np_random.normal(0, 1.5))  # mean = 0, stddev = 1.5
-                    offset_x = int(self.np_random.normal(0, 1.5))
-                    new_location = (center_y + offset_y, center_x + offset_x)  # Corrected order to (y, x)
+                    # Generate resources within a fixed radius around the cluster center
+                    offset_y = self.np_random.integers(-cluster_radius, cluster_radius + 1)
+                    offset_x = self.np_random.integers(-cluster_radius, cluster_radius + 1)
+                    new_location = (center_y + offset_y, center_x + offset_x)
 
                     # Ensure the new location is within grid bounds and not excluded
                     if (0 <= new_location[0] < self.size and
                         0 <= new_location[1] < self.size and
                         new_location not in excluded_locations):
                         selected_resource_locations.append(new_location)
+                        excluded_locations.add(new_location)  # Prevent double-adding
 
                         # Stop if we reach the desired number of resources
                         if len(selected_resource_locations) >= num_resources:
@@ -504,6 +521,8 @@ class ForagingEnvironment(AECEnv):
 
         else:
             raise ValueError("Unsupported distribution type. Choose 'uniform' or 'clustered'.")
+
+
 
     # Below are functions related to the foraging aspects of the simulation
 
