@@ -3,16 +3,16 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 
-def generate_agent_activity_heatmap(log_data, grid_size=None, normalize=True, filename=None, agent_id=None):
+def generate_agent_activity_heatmap(log_data, normalize=True, filename=None, agent_id=None, grid_size=None):
     """
     Generate and plot a heatmap of agent activity from simulation logs.
 
     Parameters:
     - log_data (pd.DataFrame): The simulation data containing 'x' and 'y' columns for agent locations.
-    - grid_size (int): The size of the grid. If None, it will be determined from the data.
     - normalize (bool): If True, normalize the heatmap using a logarithmic scale.
     - filename (str): If provided, saves the heatmap as an image file.
     - agent_id (str): If provided, filters the log data for the specified agent.
+    - grid_size (int): The size of the grid. If None, it will be determined from the data.
     """
     # Filter for a specific agent if agent_id is provided
     if agent_id:
@@ -144,7 +144,7 @@ def overlay_exchanges_on_heatmap(agent_data, exchange_data, agent_id=None, filen
     # Show the plot
     plt.show()
     
-def generate_exchange_heatmap_for_agent(exchange_data, agent_id=None, filename=None):
+def generate_exchange_heatmap_for_agent(exchange_data, agent_id=None, filename=None, grid_size=None):
     """
     Generate a heatmap of only the exchange locations for a specific agent or all agents.
 
@@ -157,9 +157,11 @@ def generate_exchange_heatmap_for_agent(exchange_data, agent_id=None, filename=N
     if agent_id:
         exchange_data = exchange_data[exchange_data['agent_id'] == agent_id]
 
+
+    # Unpack grid size
+    heatmap_rows, heatmap_cols = (grid_size , grid_size)
+    exchange_heatmap = np.zeros((heatmap_rows, heatmap_cols))
     # Create exchange heatmap
-    grid_size = max(exchange_data['x'].max(), exchange_data['y'].max()) + 1
-    exchange_heatmap = np.zeros((grid_size, grid_size))
     for _, row in exchange_data.iterrows():
         exchange_heatmap[int(row['y']), int(row['x'])] += 1  # Note (y, x) indexing for heatmaps
 

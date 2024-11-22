@@ -38,45 +38,8 @@ def test_markets(step_limit=5):
         env.render()
         #time.sleep(1)
     env.save_logs("simulation_logs.csv")
-    #env.log_results("results.txt")
     env.generate_summary_table(filename="agent_summary.xlsx", file_format="excel")
     env.close()
-    
-    # Load data
-    simulation_logs = pd.read_csv("simulation_logs.csv")
-    
-    # Separate rows by type
-    agents = simulation_logs[simulation_logs['row_type'] == "agent"]
-    exchanges = simulation_logs[simulation_logs['row_type'] == "exchange"]
-
-    # Separate rows by type
-    # Parse agent locations
-    agents['x'], agents['y'] = zip(*agents['location']
-        .str.strip("[]")
-        .str.split()
-        .map(lambda xy: (int(xy[0]), int(xy[1])) if len(xy) == 2 else (None, None))
-    )
-    # Ensure exchange coordinates are integers
-    exchanges['x'] = exchanges['x'].astype(float).astype(int)
-    exchanges['y'] = exchanges['y'].astype(float).astype(int)
-
-    # Generate heatmaps
-    generate_agent_activity_heatmap(agents, filename="agent_activity_heatmap.png")
-    #generate_exchange_heatmap(exchanges, filename="exchange_density_heatmap.png")
-    # Generate heatmap for all exchanges
-    generate_exchange_heatmap_for_agent(exchange_data=exchanges, filename="global_exchange_heatmap.png")
-
-
-    # # Overlay exchanges on individual agent heatmaps
-    # for agent in agents['agent_id'].unique():
-    #     filename = f"{agent}_overlay_heatmap.png"
-    #     overlay_exchanges_on_heatmap(agents, exchanges, agent_id=agent, filename=filename)
-    
-    # Generate heatmaps for each agent's exchanges
-    for agent in exchanges['agent_id'].dropna().unique():  # Filter out rows with missing 'agent_id'
-        filename = f"{agent}_exchange_heatmap.png"
-        generate_exchange_heatmap_for_agent(exchange_data=exchanges, agent_id=agent, filename=filename)
-
 
 
 
